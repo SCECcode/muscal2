@@ -92,14 +92,14 @@ def main():
     if not os.path.isdir(mdir) :
         subprocess.check_call(["mkdir", "-p", mdir])
 
-    fname=mdir+"/model_MUSCAL2_CANVAS_dll0.01_vardz_float32_cmpd.tiledb"
-    tarfile=mdir+"/model_MUSCAL2_CANVAS_dll0.01_vardz_float32_cmpd.tiledb.tar.gz"
+    fname=mdir+"/model_MUSCAL_CANVAS_dll0.01_vardz_float32_cmpd.tiledb"
+    tarfile=mdir+"/model_MUSCAL_CANVAS_dll0.01_vardz_float32_cmpd.tiledb.tar.gz"
     if not os.path.isfile(fname) :
       print("download ", tarfile)
       url = path + "/" + tarfile 
       download_urlfile(url,tarfile)
       subprocess.check_call(["tar", "-zxvf", tarfile])
-      subprocess.check_call(["mv", "model_MUSCAL2_CANVAS_dll0.01_vardz_float32_cmpd.tiledb", mdir])
+      subprocess.check_call(["mv", "model_MUSCAL_CANVAS_dll0.01_vardz_float32_cmpd.tiledb", mdir])
 #unpack into vp.dat/vs.dat/rho.dat
       subprocess.check_call(["./rewrite2bin.py", fname])
       subprocess.check_call(["mv", "vp.dat", mdir])

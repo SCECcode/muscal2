@@ -13,7 +13,7 @@
 #include "cJSON.h"
 
 int muscal2_ucvm_debug=0;
-int muscal2_ucvm_debug_stats=1;
+int muscal2_ucvm_debug_stats=0;
 int muscal2_ucvm_debug_detail=0;
 FILE *stderrfp=NULL;
 

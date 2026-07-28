@@ -25,7 +25,7 @@ $(objects): %.o: %.c
 	$(CC) -fPIC -DDYNAMIC_LIBRARY $(AM_CFLAGS) -o $@ -c $^
 
 convert_nc_to_tiledb.o: convert_nc_to_tiledb.c
-	$(CC) $(AM_CFLAGS) -o $@ -c $^
+	$(CC) -maxv2 $(AM_CFLAGS) -o $@ -c $^
 
 convert_nc_to_tiledb : convert_nc_to_tiledb.o 
 	$(CC) -o $@ $^ $(AM_LDFLAGS)

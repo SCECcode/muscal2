@@ -13,8 +13,11 @@
 #include "cJSON.h"
 
 int muscal2_ucvm_debug=0;
+int muscal2_ucvm_debug_stats=0;
 int muscal2_ucvm_debug_detail=0;
 FILE *stderrfp=NULL;
+
+char *tiledb_stats_json = NULL;
 
 /** The config of the model */
 char *muscal2_config_string=NULL;
@@ -111,6 +114,7 @@ int muscal2_init(const char *dir, const char *label) {
 int muscal2_query(muscal2_point_t *points, muscal2_properties_t *data, int numpoints) {
 
 if(muscal2_ucvm_debug){ fprintf(stderrfp,"\ncalling muscal2_query with %d numpoints\n",numpoints); }
+if(muscal2_ucvm_debug_stats){ tiledb_stats_enable(); }
 
     muscal2_dataset_t *model=muscal2_dataset;
 
@@ -174,6 +178,18 @@ if(muscal2_ucvm_debug){ fprintf(stderrfp,"\ncalling muscal2_query with %d numpoi
             get_1dnn_property(model, &(pt_info[i]), &(data[i]));
         }
     } 
+
+if(muscal2_ucvm_debug_stats){ 
+    printf("--TileDB Query Performance Stats --\n");
+    tiledb_stats_dump(stdout);
+    tiledb_stats_raw_dump_str(&tiledb_stats_json);
+    if(tiledb_stats_json != NULL) {
+       fprintf(stderr,"JSON stats: \n   %s\n", tiledb_stats_json);
+       tiledb_stats_free_str(&tiledb_stats_json);
+    }
+    tiledb_stats_disable();
+}
+
     return SUCCESS;
 }
 

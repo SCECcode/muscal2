@@ -53,6 +53,9 @@ void add_surface_data(muscal2_dataset_t *model, char *filepath, int sz) {
 /**** for muscal2_dataset_t ****/
 muscal2_dataset_t * muscal2_read_dataset(char *datadir, char *datafile) {
 
+    tiledb_error_t *error=NULL;
+    tiledb_config_t *config=NULL;
+
     muscal2_dataset_t *model= (muscal2_dataset_t *) malloc(sizeof(muscal2_dataset_t)*1);
 
     int sz=strlen(datadir)+strlen(datafile)+2;
@@ -60,8 +63,19 @@ muscal2_dataset_t * muscal2_read_dataset(char *datadir, char *datafile) {
     snprintf(model->tiledb_uri,sz,"%s/%s",datadir,datafile);
     if(muscal2_ucvm_debug) fprintf(stderrfp," data file ..%s\n", model->tiledb_uri);
 
+/* setup in tiledb memory cache */
+    tiledb_config_alloc(&config, &error);
+// Set cache limit to 32 GB (in bytes)
+    if (tiledb_config_set(config, "sm.tile_cache_size", "34359738368", &error) != TILEDB_OK) {
+    // Print and free the error message if set failed
+        const char* msg = NULL;
+        tiledb_error_message(error, &msg);
+        fprintf(stderr, "TileDB Config Error: %s\n", msg);
+        tiledb_error_free(&error);
+    }
+
 /* setup ctx */
-    int rc=tiledb_ctx_alloc(NULL, &model->tiledb_ctx);
+    int rc=tiledb_ctx_alloc(config, &model->tiledb_ctx);
     tiledb_array_alloc(model->tiledb_ctx, model->tiledb_uri, &model->tiledb_array);
     if (tiledb_array_open(model->tiledb_ctx, model->tiledb_array, TILEDB_READ) != TILEDB_OK) {
         fprintf(stderr, "[ERROR] Unable to open TileDB array '%s' for reading.\n", model->tiledb_uri);
@@ -135,6 +149,13 @@ muscal2_dataset_t * muscal2_read_dataset(char *datadir, char *datafile) {
     }
 
     model->kdsurface=NULL;
+
+// Clean up config and error objects when done with setup
+    tiledb_config_free(&config);
+    if (error != NULL) {
+        tiledb_error_free(&error);
+    }
+
     return model;
 }
 

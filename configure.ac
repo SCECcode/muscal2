@@ -86,6 +86,7 @@ AC_CONFIG_FILES([
   src/Makefile
   data/Makefile
   test/Makefile
+  tools/Makefile
   ])
 
 AC_OUTPUT

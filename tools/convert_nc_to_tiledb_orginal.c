@@ -1,7 +1,7 @@
 /**
    convert_nc_to_tiledb.c
 
-   Usage: ./convert_nc_to_tiledb nc_file tiledb_file
+   Usage: ./convert_nc_to_tiledb nc_file tildb_file
 
 nc_file => /var/www/html/CVM_DATASET_DIRECTORY/model/muscal/model_MUSCAL_CANVAS_dll0.01_vardz_float32_cmpd.nc
 tiledb_file => model_MUSCAL_CANVAS_dll0.01_vardz_float32_cmpd.tiledb
@@ -21,13 +21,6 @@ tiledb_file => model_MUSCAL_CANVAS_dll0.01_vardz_float32_cmpd.tiledb
 // Streaming Pipeline Depth-Chunk Setting
 #define DEPTH_CHUNK_SIZE 10
 
-// --------------------------------------------------------------------------
-// FIX 1: Defined smaller spatial tile extents for latitude and longitude.
-// Adjust these chunk sizes (e.g., 10x32x32 or 10x50x50) as needed for your workload.
-// --------------------------------------------------------------------------
-#define LAT_TILE_EXTENT 32
-#define LON_TILE_EXTENT 32
-
 #define ERR_CHCK(nc_stat) { if (nc_stat != NC_NOERR) { printf("NetCDF Error: %s\n", nc_strerror(nc_stat)); return -1; } }
 
 void create_tiledb_array_v230(const char* array_name) {
@@ -36,20 +29,16 @@ void create_tiledb_array_v230(const char* array_name) {
 
     // 1. Setup Bounded Dimensions (v2.30 compatible structures)
     tiledb_dimension_t *d1, *d2, *d3;
-    
-    // Depth dimension
     int32_t depth_bounds[] = {0, DIM_DEPTH - 1};
     int32_t depth_extent = DEPTH_CHUNK_SIZE; 
     tiledb_dimension_alloc(ctx, "depth", TILEDB_INT32, depth_bounds, &depth_extent, &d1);
 
-    // Latitude dimension (Updated: using smaller tile extent instead of full DIM_LAT)
     int32_t lat_bounds[] = {0, DIM_LAT - 1};
-    int32_t lat_extent = LAT_TILE_EXTENT; 
+    int32_t lat_extent = DIM_LAT; 
     tiledb_dimension_alloc(ctx, "latitude", TILEDB_INT32, lat_bounds, &lat_extent, &d2);
 
-    // Longitude dimension (Updated: using smaller tile extent instead of full DIM_LON)
     int32_t lon_bounds[] = {0, DIM_LON - 1};
-    int32_t lon_extent = LON_TILE_EXTENT;
+    int32_t lon_extent = DIM_LON;
     tiledb_dimension_alloc(ctx, "longitude", TILEDB_INT32, lon_bounds, &lon_extent, &d3);
 
     // 2. Setup Spatial Domain Container
@@ -86,9 +75,12 @@ void create_tiledb_array_v230(const char* array_name) {
     tiledb_ctx_free(&ctx);
 }
 
-int main(int argc, char *argv[]) {
+//    const char* nc_filename = "/var/www/html/CVM_DATASET_DIRECTORY/model/muscal/model_MUSCAL_CANVAS_dll0.01_vardz_float32_cmpd.nc";
+//    const char* tiledb_array_name = "model_MUSCAL_CANVAS_dll0.01_vardz_float32_cmpd.tiledb";
 
-    if(argc != 3) {
+int main( int argc, char *argv[]) {
+
+    if(argc !=3) {
         fprintf(stderr," Usage:  convert_nc_to_tiledb nc_datafile tiledb_filename !!\n");
         return -1;
     }
@@ -217,6 +209,8 @@ int main(int argc, char *argv[]) {
         tiledb_query_set_subarray_t(ctx, query, subarray);
 
         // Bind attributes using the shared byte-count tracking reference.
+        // (Note: TileDB safely reads the value at query submit time, but we pass the address 
+        // separately for each call because TileDB may write back to it upon completion)
         uint64_t bytes_vp = current_element_bytes;
         uint64_t bytes_vs = current_element_bytes;
         uint64_t bytes_rho = current_element_bytes;
@@ -254,29 +248,10 @@ int main(int argc, char *argv[]) {
         tiledb_query_free(&query);
     }
 
-    // Close array and NetCDF file
+    // --- PIPELINE CLEANUP (NORMAL COMPLETION) ---
     nc_close(ncid);
     tiledb_array_close(ctx, array);
     tiledb_array_free(&array);
-
-    // =========================================================
-    // FIX 3: CONSOLIDATE & VACUUM FRAGMENTS
-    // Merges the 49 individual depth-slice fragments created 
-    // during streaming into 1 single consolidated fragment.
-    // =========================================================
-    printf("Consolidating array fragments to optimize read performance...\n");
-    tiledb_config_t* config = NULL;
-    tiledb_config_alloc(&config, NULL);
-    
-    if (tiledb_array_consolidate(ctx, tiledb_array_name, config) == TILEDB_OK) {
-        printf(" -> Array consolidation completed successfully.\n");
-        tiledb_array_vacuum(ctx, tiledb_array_name, config);
-        printf(" -> Fragment cleanup/vacuum completed.\n");
-    } else {
-        fprintf(stderr, "Warning: Array consolidation encountered an issue.\n");
-    }
-    tiledb_config_free(&config);
-
     tiledb_ctx_free(&ctx);
 
     free(buffer_vp);
@@ -305,4 +280,3 @@ error_cleanup:
     fprintf(stderr, "\nPipeline aborted due to runtime errors.\n");
     return -1;
 }
-

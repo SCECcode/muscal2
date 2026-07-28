@@ -13,7 +13,7 @@
 #include "cJSON.h"
 
 int muscal2_ucvm_debug=0;
-int muscal2_ucvm_debug_stats=0;
+int muscal2_ucvm_debug_stats=1;
 int muscal2_ucvm_debug_detail=0;
 FILE *stderrfp=NULL;
 
@@ -52,10 +52,12 @@ int muscal2_init(const char *dir, const char *label) {
     char configbuf[512];
     double north_height_m = 0, east_width_m = 0, rotation_angle = 0;
 
-    if(muscal2_ucvm_debug) {
+    if(muscal2_ucvm_debug || muscal2_ucvm_debug_stats){
       stderrfp = fopen("muscal2_debug.log", "w+");
       fprintf(stderrfp,"\n===== START muscal2 ===== \n\n");
     }
+
+    if(muscal2_ucvm_debug_stats){ tiledb_stats_enable(); }
 
     // Initialize variables.
     
@@ -114,7 +116,6 @@ int muscal2_init(const char *dir, const char *label) {
 int muscal2_query(muscal2_point_t *points, muscal2_properties_t *data, int numpoints) {
 
 if(muscal2_ucvm_debug){ fprintf(stderrfp,"\ncalling muscal2_query with %d numpoints\n",numpoints); }
-if(muscal2_ucvm_debug_stats){ tiledb_stats_enable(); }
 
     muscal2_dataset_t *model=muscal2_dataset;
 
@@ -146,6 +147,9 @@ if(muscal2_ucvm_debug_stats){ tiledb_stats_enable(); }
         pt_info[i].lon=points[i].longitude;
         pt_info[i].lat=points[i].latitude;
         pt_info[i].dep=points[i].depth;
+        if(muscal2_ucvm_debug_stats) {
+            fprintf(stderrfp,"POINT: %lf %lf %lf\n", points[i].longitude,points[i].latitude,points[i].depth);
+        }
 
         pt_info[i].lon_idx=find_buffer_idx_clamped(lon_list,nx,pt_info[i].lon);
         pt_info[i].lat_idx=find_buffer_idx_clamped(lat_list,ny,pt_info[i].lat);
@@ -179,16 +183,15 @@ if(muscal2_ucvm_debug_stats){ tiledb_stats_enable(); }
         }
     } 
 
-if(muscal2_ucvm_debug_stats){ 
-    printf("--TileDB Query Performance Stats --\n");
-    tiledb_stats_dump(stdout);
-    tiledb_stats_raw_dump_str(&tiledb_stats_json);
-    if(tiledb_stats_json != NULL) {
-       fprintf(stderr,"JSON stats: \n   %s\n", tiledb_stats_json);
-       tiledb_stats_free_str(&tiledb_stats_json);
-    }
-    tiledb_stats_disable();
-}
+    if(muscal2_ucvm_debug_stats){
+        fprintf(stderrfp,"--TileDB Query Performance Stats --\n");
+        //tiledb_stats_dump(stderrfp);
+        //tiledb_stats_raw_dump_str(&tiledb_stats_json);
+        if(tiledb_stats_json != NULL) {
+           fprintf(stderrfp,"JSON stats: \n   %s\n", tiledb_stats_json);
+           tiledb_stats_free_str(&tiledb_stats_json);
+        }
+    }   
 
     return SUCCESS;
 }
@@ -215,10 +218,12 @@ int muscal2_finalize() {
         free_muscal2_dataset(muscal2_dataset);
     }
 
-    if(muscal2_ucvm_debug) {
+    if(muscal2_ucvm_debug || muscal2_ucvm_debug_stats){
      fprintf(stderrfp,"::DONE::\n"); 
      fclose(stderrfp);
     }
+
+    if(muscal2_ucvm_debug_stats){ tiledb_stats_disable(); }   
 
     return SUCCESS;
 }

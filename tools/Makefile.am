@@ -1,34 +1,30 @@
 # Autoconf/automake file
 
-objects =
+objects = um_tiledb.o
 
 # General compiler/linker flags
 AM_CFLAGS = ${CFLAGS} ${CPPFLAGS} -I$(prefix)/include -I${UCVM_INSTALL_PATH}/lib/tiledb/include -I${UCVM_INSTALL_PATH}/lib/netcdf/include
 AM_LDFLAGS = ${LDFLAGS} -L$(prefix)/lib ${LIBS} -L${UCVM_INSTALL_PATH}/lib/tiledb/lib64 -ltiledb -Wl,-rpath,${UCVM_INSTALL_PATH}/lib/tiledb/lib64 -L${UCVM_INSTALL_PATH}/lib/netcdf/lib -lnetcdf -lm
 
 
-TOOL_TARGETS = build_kdtree query_kdtree read_coords read_point lookup_point lookup_nc_point 
-TARGETS = convert_nc_to_tiledb consolidate_tiledb
+TARGETS = dump_cells dump_points dump_coords convert_nc_to_tiledb consolidate_tiledb
 
 
-all: $(TARGETS) $(TOOL_TARGETS)
+all: $(TARGETS) 
 
 install:
-	cp build_kdtree ${prefix}/bin
-	cp query_kdtree ${prefix}/bin
-
 clean:
-	rm -rf $(TOOL_TARGETS) $(TARGETS)
+	rm -rf $(TARGETS)
 	rm -rf *.o
 
 $(objects): %.o: %.c
 	$(CC) -fPIC -DDYNAMIC_LIBRARY $(AM_CFLAGS) -o $@ -c $^
 
 convert_nc_to_tiledb.o: convert_nc_to_tiledb.c
-	$(CC) -maxv2 $(AM_CFLAGS) -o $@ -c $^
+	$(CC)  -mavx2 $(AM_CFLAGS) -I${UCVM_INSTALL_PATH}/lib/netcdf/include -o $@ -c $^
 
 convert_nc_to_tiledb : convert_nc_to_tiledb.o 
-	$(CC) -o $@ $^ $(AM_LDFLAGS)
+	$(CC) -o $@ $^ $(AM_LDFLAGS) -L${UCVM_INSTALL_PATH}/lib/netcdf/lib -lnetcdf 
 
 consolidate_tiledb.o: consolidate_tiledb.c
 	$(CC) $(AM_CFLAGS) -o $@ -c $^
@@ -36,39 +32,23 @@ consolidate_tiledb.o: consolidate_tiledb.c
 consolidate_tiledb : consolidate_tiledb.o 
 	$(CC) -o $@ $^ $(AM_LDFLAGS)
 
-read_coords.o: read_coords.c
+dump_cells.o: dump_cells.c
 	$(CC) $(AM_CFLAGS) -o $@ -c $^
 
-read_coords : read_coords.o 
+dump_cells : dump_cells.o um_tiledb.o 
 	$(CC) -o $@ $^ $(AM_LDFLAGS)
 
-read_point.o: read_point.c
+dump_coords.o: dump_coords.c
+dump_points.o: dump_points.c
 	$(CC) $(AM_CFLAGS) -o $@ -c $^
 
-read_point : read_point.o 
+dump_points : dump_points.o um_tiledb.o 
 	$(CC) -o $@ $^ $(AM_LDFLAGS)
 
-lookup_point.o: lookup_point.c
+dump_coords.o: dump_coords.c
 	$(CC) $(AM_CFLAGS) -o $@ -c $^
 
-lookup_point : lookup_point.o 
+dump_coords : dump_coords.o um_tiledb.o
 	$(CC) -o $@ $^ $(AM_LDFLAGS)
 
-lookup_nc_point.o: lookup_nc_point.c
-	$(CC) $(AM_CFLAGS) -o $@ -c $^
-
-lookup_nc_point : lookup_nc_point.o 
-	$(CC) -o $@ $^ $(AM_LDFLAGS)
-
-build_kdtree.o: build_kdtree.c
-	$(CC) $(AM_CFLAGS) -I../src -o $@ -c $^
-
-build_kdtree: build_kdtree.o
-	$(CC) -o $@ $^ $(AM_LDFLAGS) -L../src -lmuscal2
-
-query_kdtree.o: query_kdtree.c
-	$(CC) $(AM_CFLAGS) -I../src -o $@ -c $^
-
-query_kdtree: query_kdtree.o
-	$(CC) -o $@ $^ $(AM_LDFLAGS) -L../src -lmuscal2
 

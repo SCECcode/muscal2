@@ -225,7 +225,7 @@ void kdtree_nearest(KDNode *root, KDVec3 *query, KDVec3 **best, float *best_dist
     if (d < *best_dist) {
         *best_dist = d;
         *best = &(root->point);
-        if(muscal2_ucvm_debug_detail) {
+        if(muscal_ucvm_debug_detail) {
          fprintf(stderrfp,"In kdtree_nearest.. reset %lf with (%d)\n", d, (*best)->lldindex);
         }
     }
@@ -255,7 +255,7 @@ void kdtree_nearest_full(KDlld *pnts,KDNode *root, KDVec3 *query, KDVec3 **best,
     if (d < *best_dist) {
         *best_dist = d;
         *best = &(root->point);
-        if(muscal2_ucvm_debug_detail) {
+        if(muscal_ucvm_debug_detail) {
          int idx= (*best)->lldindex;
          fprintf(stderrfp,"In kdtree_nearest_full -> reset distance(%lf) with idx(%d)\n", d, (*best)->lldindex);
          fprintf(stderrfp,"  ===   %lf %lf %lf \n", (*best)->x, (*best)->y, (*best)->z);
@@ -297,7 +297,7 @@ void knn_insert(KDNodeResult *results, int N, float dist, KDVec3 *point) {
     results[i].point = point;
 
     // Mirrors your original debug statement
-    if (muscal2_ucvm_debug) {
+    if (muscal_ucvm_debug) {
         fprintf(stderrfp, "In kdtree_n_nearest.. added distance %lf with (%d) at slot %d\n", 
                 (double)dist, point->lldindex, i);
     }

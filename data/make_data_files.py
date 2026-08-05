@@ -15,7 +15,7 @@ if sys.version_info.major >= (3) :
 else:
   from urllib2 import urlopen
 
-model = "MUSCAL2"
+model = "MUSCAL"
 
 def usage():
     print("\n./make_data_files.py\n\n")
@@ -78,7 +78,7 @@ def main():
     print("\nDownloading model dataset\n")
 
 
-#check if cvm-large-dataset/muscal2 exists or not
+#check if cvm-large-dataset/muscal exists or not
 #yes,  link it over
     volume_top_dir=os.environ.get('CVM_VOLUME_TOP_DIR')
     if volume_top_dir != None :

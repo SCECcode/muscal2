@@ -1,4 +1,4 @@
-# The Multi-scale Statewide CALifornia Velocity Model with TileDB (muscal2)
+# The Multi-scale Statewide CALifornia Velocity Model with TileDB (muscal)
 
 <a href="https://github.com/sceccode/muscal.git"><img src="https://github.com/sceccode/muscal/wiki/images/muscal_logo.png"></a>
 

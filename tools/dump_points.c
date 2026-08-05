@@ -32,8 +32,8 @@ int main(int argc, char **argv) {
     const char* tiledb_array_name = "model_MUSCAL_CANVAS_dll0.01_vardz_float32_cmpd.tiledb";
     int rc;
     um_tiledb_t tdb;
-    muscal2_pt_info_t pt;
-    muscal2_pt_property_t data;
+    muscal_pt_info_t pt;
+    muscal_pt_property_t data;
 
     if(argc != 2) { usage(); }
     strcpy(datafile, argv[1]);

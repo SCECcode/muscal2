@@ -1,2 +1,2 @@
 
-ucvm_query -m muscal2 -f $UCVM_INSTALL_PATH/conf/ucvm.conf <in
+ucvm_query -m muscal -f $UCVM_INSTALL_PATH/conf/ucvm.conf <in

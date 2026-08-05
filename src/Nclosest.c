@@ -25,7 +25,7 @@ void knn_insert(KDResult *results, int N, float dist, KDVec3 *point) {
     results[i].point = point;
 
     // Mirrors your original debug statement
-    if (muscal2_ucvm_debug) {
+    if (muscal_ucvm_debug) {
         fprintf(stderrfp, "In kdtree_n_nearest.. added distance %lf with (%d) at slot %d\n", 
                 (double)dist, point->lldindex, i);
     }

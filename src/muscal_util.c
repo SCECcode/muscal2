@@ -1,9 +1,10 @@
 /*
  * muscal_util.c
- * nc=netcdf
 */
 
 #include "muscal_util.h"
+
+int debug=0;
 
 /* open a binary file and extract total number of data out of it  */
 float *get_binary_float_buffer(const char *datadir, char *datafile, int total) {
@@ -14,6 +15,7 @@ float *get_binary_float_buffer(const char *datadir, char *datafile, int total) {
 
     char filepath[256];
     sprintf(filepath, "%s/%s", datadir, datafile);
+    if(debug) fprintf(stderr," data file ..%s\n", filepath);
 
     FILE *fp=fopen(filepath,"rb");
     size_t read_count = fread(buffer, sizeof(float), total, fp);
@@ -24,7 +26,7 @@ float *get_binary_float_buffer(const char *datadir, char *datafile, int total) {
     return buffer;
 }
 
-// find nearest buffer idx even it it is over it
+// find nearest buffer idx even if it is over it
 int find_nearest_buffer_idx(float *buffer, size_t nelems, float target) {
     size_t lo = 0, hi = nelems; // search in [lo, hi)
     while (lo < hi) {
@@ -112,6 +114,7 @@ void dump_corners(FILE *fp, float *corners) {
 }
 
 
+// create a float array from a string of "{ 10.1, 2.5 ...}",
 // remember to free it
 float *float_array_it(const char *str, size_t *n){
 

@@ -6,12 +6,8 @@
 
 #include "ucvm_model_dtypes.h"
 #include "muscal.h"
-#include "um_netcdf.h"
-
-#include "muscal_dataset.h"
 #include "muscal_util.h"
-
-
+#include <tiledb/tiledb.h>
 
 /*** for surface data ***/
 int free_kdnodesetup(KDNodeSetup *sptr) {
@@ -22,7 +18,7 @@ int free_kdnodesetup(KDNodeSetup *sptr) {
   return SUCCESS;
 }
 
-void add_surface_data(muscal_dataset_t  *data, char  *filepath, int sz) {
+void add_surface_data(muscal_dataset_t *model, char *filepath, int sz) {
 
   double lat, lon, depth, vs, vp, density;
   char line[KD_MAX_LINE];
@@ -51,162 +47,257 @@ void add_surface_data(muscal_dataset_t  *data, char  *filepath, int sz) {
   }
   fclose(fp);
   kdsurface->nodes = build_kdtree(kdsurface->vpnts, numread, 0);
-  data->kdsurface=kdsurface;
+  model->kdsurface=kdsurface;
 }
 
 /**** for muscal_dataset_t ****/
-muscal_dataset_t *make_a_muscal_dataset(char *datadir, char *datafile, int tooBig, int useBinary) {
-    char filepath[256];
-    size_t nelems= 0;
-    nc_type vtype;
+muscal_dataset_t * muscal_read_dataset(char *datadir, char *datafile) {
 
-    muscal_dataset_t *data=(muscal_dataset_t *)malloc(sizeof(muscal_dataset_t));
+    tiledb_error_t *error=NULL;
+    tiledb_config_t *config=NULL;
 
-    sprintf(filepath, "%s/%s", datadir, datafile);
-    if(muscal_ucvm_debug) fprintf(stderrfp," data file ..%s\n", filepath);
+    muscal_dataset_t *model= (muscal_dataset_t *) malloc(sizeof(muscal_dataset_t)*1);
 
-/* setup ncid */
-    data->ncid=open_nc(filepath);
-  
-/* setup nx/ny/nz and void ptrs */
-    data->longitudes=(float *) get_nc_float_buffer(data->ncid, "longitude", filepath, &vtype, &nelems, 1);
-    data->nx=nelems;
-    if(muscal_ucvm_debug_detail) {
-        fprintf(stderrfp, "  Longitudes: %d\n", nelems);
-        for(int i=0;i<nelems; i++) {
-            fprintf(stderrfp, "%d  %f\n", i, data->longitudes[i]);
-       	}
+    int sz=strlen(datadir)+strlen(datafile)+2;
+    model->tiledb_uri= (char  *) malloc(sizeof(char) * sz);
+    snprintf(model->tiledb_uri,sz,"%s/%s",datadir,datafile);
+    if(muscal_ucvm_debug) fprintf(stderrfp," data file ..%s\n", model->tiledb_uri);
+
+/* setup in tiledb memory cache */
+    tiledb_config_alloc(&config, &error);
+// Set cache limit to 32 GB (in bytes)
+    if (tiledb_config_set(config, "sm.tile_cache_size", "34359738368", &error) != TILEDB_OK) {
+    // Print and free the error message if set failed
+        const char* msg = NULL;
+        tiledb_error_message(error, &msg);
+        fprintf(stderr, "TileDB Config Error: %s\n", msg);
+        tiledb_error_free(&error);
     }
 
-    data->latitudes=(float *) get_nc_float_buffer(data->ncid, "latitude", filepath, &vtype, &nelems, 1);
-    data->ny=nelems;
-    if(muscal_ucvm_debug_detail) {
-        fprintf(stderrfp, "  Latitude: %d\n", nelems);
-        for(int i=0;i<nelems; i++) {
-            fprintf(stderrfp, "%d  %f\n", i, data->latitudes[i]);
-       	}
+/* setup ctx */
+    int rc=tiledb_ctx_alloc(config, &model->tiledb_ctx);
+    tiledb_array_alloc(model->tiledb_ctx, model->tiledb_uri, &model->tiledb_array);
+    if (tiledb_array_open(model->tiledb_ctx, model->tiledb_array, TILEDB_READ) != TILEDB_OK) {
+        fprintf(stderr, "[ERROR] Unable to open TileDB array '%s' for reading.\n", model->tiledb_uri);
+        if (model->tiledb_array) tiledb_array_free(&model->tiledb_array);
+        if (model->tiledb_ctx) tiledb_ctx_free(&model->tiledb_ctx);
+        return NULL;
+    }
+    if(muscal_ucvm_debug) {
+      fprintf(stderrfp, "Successfully opened array '%s' in read mode.\n", model->tiledb_uri);
     }
 
-    data->depths=(float *) get_nc_float_buffer(data->ncid, "depth", filepath, &vtype, &nelems, 1);
-    data->nz=nelems;
-    if(muscal_ucvm_debug_detail) {
-        fprintf(stderrfp, "  Depths: %d\n", nelems);
-        for(int i=0;i<nelems; i++) {
-            fprintf(stderrfp, "%d  %f\n", i, data->depths[i]);
-       	}
-    }
+    // extract metadata from tiledb_uri
+    tiledb_datatype_t value_type;
+    uint32_t value_num;
+    const void* value_ptr;
 
-/* Get variable ID by name */
-    data->vp_varid=get_nc_varid(data->ncid,"vp",filepath);
-    data->vs_varid=get_nc_varid(data->ncid,"vs",filepath);
-    data->rho_varid=get_nc_varid(data->ncid,"rho",filepath);
-
-    data->layer_cache_cnt=0;
-    data->col_cache_cnt=0;
-    data->in_memory =0;
-    data->kdsurface=NULL;
-
-    if(!tooBig) {
-/* load all vp/vs/rho data in memory */
-        int total= data->nx * data->ny * data->nz;
-
-	if(!useBinary) {
-            if(muscal_ucvm_debug) { fprintf(stderrfp, " import USING netcdf data files\n"); }
-            data->vp_buffer=get_nc_float_buffer(data->ncid, "vp", filepath, &vtype, &nelems, 3);
-            data->vs_buffer=get_nc_float_buffer(data->ncid, "vs", filepath, &vtype, &nelems, 3);
-            data->rho_buffer=get_nc_float_buffer(data->ncid, "rho", filepath, &vtype, &nelems, 3);
-	    } else {
-                if(muscal_ucvm_debug) { fprintf(stderrfp, " import USING binary data files\n"); }
-                data->vp_buffer = get_binary_float_buffer(datadir, "vp.dat", total);
-                data->vs_buffer = get_binary_float_buffer(datadir, "vs.dat", total);
-                data->rho_buffer = get_binary_float_buffer(datadir, "rho.dat", total);
+    // Fetch a direct internal pointer to the metadata values
+    tiledb_array_get_metadata(model->tiledb_ctx, model->tiledb_array, "coords_depth", &value_type, &value_num, &value_ptr);
+    if (value_ptr != NULL) {
+        model->nz = value_num;
+        model->depths = (float*)malloc(model->nz * sizeof(float));
+        // Copy the raw bytes securely into our typed array structure
+        memcpy(model->depths, value_ptr, model->nz * sizeof(float));
+        
+        if(muscal_ucvm_debug) {
+          fprintf(stderrfp,"--- DEPTH METADATA (Total Elements Found: %u) ---\n", value_num);
+          fprintf(stderrfp,"First 5 values: ");
+          for (int i = 0; i < (model->nz < 5 ? model->nz : 5); i++) {
+             fprintf(stderrfp,"%f ", model->depths[i]);
+          }
+          fprintf(stderrfp,"\nLast value: %f\n\n", model->depths[model->nz - 1]);
         }
-	data->elems=total;
-        data->in_memory=1;
-
-        } else {
-	  data->elems=0;
-	  data->vp_buffer=NULL;
-	  data->vs_buffer=NULL;
-	  data->rho_buffer=NULL;
+    } else {
+        fprintf(stderr,"[ERROR] Metadata key 'coords_depth' was not found or is empty.\n\n");
     }
-    return data;
+
+    tiledb_array_get_metadata(model->tiledb_ctx, model->tiledb_array, "coords_latitude", &value_type, &value_num, &value_ptr);
+    if (value_ptr != NULL) {
+        model->ny= value_num;
+        model->latitudes = (float*)malloc(model->ny * sizeof(float));
+        memcpy(model->latitudes, value_ptr, model->ny * sizeof(float));
+        
+        if(muscal_ucvm_debug) {
+          fprintf(stderrfp,"--- LATITUDE METADATA (Total Elements Found: %u) ---\n", value_num);
+          fprintf(stderrfp,"First 5 values: ");
+          for (int i = 0; i < (model->ny < 5 ? model->ny : 5); i++) {
+            fprintf(stderrfp,"%f ", model->latitudes[i]);
+          }
+          fprintf(stderrfp,"\nLast value: %f\n\n", model->latitudes[model->ny - 1]);
+        }
+    } else {
+        fprintf(stderr,"[ERROR] Metadata key 'coords_latitude' was not found or is empty.\n\n");
+    }
+
+    tiledb_array_get_metadata(model->tiledb_ctx, model->tiledb_array, "coords_longitude", &value_type, &value_num, &value_ptr);
+    if (value_ptr != NULL) {
+        model->nx = value_num;
+        model->longitudes = (float*)malloc(model->nx * sizeof(float));
+        memcpy(model->longitudes, value_ptr, model->nx * sizeof(float));
+        
+        if(muscal_ucvm_debug) {
+          fprintf(stderrfp,"--- LONGITUDE METADATA (Total Elements Found: %u) ---\n", value_num);
+          fprintf(stderrfp,"First 5 values: ");
+          for (int i = 0; i < (model->nx < 5 ? model->nx : 5); i++) {
+              fprintf(stderrfp,"%f ", model->longitudes[i]);
+          }
+          fprintf(stderrfp,"\nLast value: %f\n\n", model->longitudes[model->nx - 1]);
+        }
+    } else {
+        fprintf(stderr,"[ERROR] Metadata key 'coords_longitude' was not found or is empty.\n\n");
+    }
+
+    model->kdsurface=NULL;
+
+// Clean up config and error objects when done with setup
+    tiledb_config_free(&config);
+    if (error != NULL) {
+        tiledb_error_free(&error);
+    }
+
+    return model;
 }
 
+void muscal_read_surface(muscal_dataset_t *model, int count, char *datadir, char *surface_file) {
+    char filepath[1024];
+    sprintf(filepath, "%s/%s", datadir, surface_file);
+    if(muscal_ucvm_debug) fprintf(stderrfp," data file ..%s\n", filepath);
+    add_surface_data(model, filepath, count);
+}
 
+// pretty print the metadata of the dataset
+void dump_dataset_metadata(muscal_dataset_t *model) {
+    int nx=model->nx;
+    int ny=model->ny;
+    int nz=model->nz;
 
-int free_muscal_dataset(muscal_dataset_t *data) {
-    free(data->depths);
-    free(data->latitudes);
-    free(data->longitudes);
-    if(data->vp_buffer != NULL) free(data->vp_buffer);
-    if(data->vs_buffer != NULL) free(data->vs_buffer);
-    if(data->rho_buffer != NULL) free(data->rho_buffer);
-    nc_close(data->ncid);
-
-    if(data->kdsurface!=NULL) {
-      free_kdnodesetup(data->kdsurface);
+    if(muscal_ucvm_debug_detail) {
+        fprintf(stderrfp, "  Longitudes: %d\n", nx);
+        for(int i=0;i<nx; i++) {
+            fprintf(stderrfp, "%d  %f\n", i, model->longitudes[i]);
+       	}
     }
 
-    //free the caches
-    for(int i=0; i< data->layer_cache_cnt; i++) {
-      free_a_cache_layer(data->layer_cache[i]);
-    }
-    for(int i=0; i< data->col_cache_cnt; i++) {
-      free_a_cache_col(data->col_cache[i]);
+    if(muscal_ucvm_debug_detail) {
+        fprintf(stderrfp, "  Latitude: %d\n", ny);
+        for(int i=0;i<ny; i++) {
+            fprintf(stderrfp, "%d  %f\n", i, model->latitudes[i]);
+       	}
     }
 
-    free(data);
+    if(muscal_ucvm_debug_detail) {
+        fprintf(stderrfp, "  Depths: %d\n", nz);
+        for(int i=0;i<nz; i++) {
+            fprintf(stderrfp, "%d  %f\n", i, model->depths[i]);
+       	}
+    }
+}
+
+int free_muscal_dataset(muscal_dataset_t *model) {
+    free(model->depths);
+    free(model->latitudes);
+    free(model->longitudes);
+
+    if(model->kdsurface!=NULL) {
+      free_kdnodesetup(model->kdsurface);
+    }
+
+    if (model->tiledb_array) {
+        tiledb_array_close(model->tiledb_ctx, model->tiledb_array);
+        tiledb_array_free(&model->tiledb_array);
+    }
+    if (model->tiledb_ctx) tiledb_ctx_free(&model->tiledb_ctx);
+
+    free(model);
     return SUCCESS;
 }
 
-/**** straight or trilinear/bilinear ****/
-int _buffer_offset(muscal_dataset_t * dataset, int x_idx, int  y_idx, int z_idx) {
-    int nx=dataset->nx;
-    int ny=dataset->ny;
-    int nz=dataset->nz;
+/**** straight or trilinear/bilinear or muscal_1d ****/
+int get_one_property(muscal_dataset_t *model, muscal_pt_info_t *pt, muscal_properties_t *data) {
+    tiledb_query_t* query = NULL;
+    tiledb_subarray_t* subarray = NULL;
 
-    int offset= (z_idx)*(ny * nx)+(y_idx)*(nx)+x_idx;
-    if(muscal_ucvm_debug) { fprintf(stderrfp,"\nTarget offset %d : idx lon/lat/dep = %d/%d/%d\n", offset,x_idx, y_idx, z_idx); }
+    float real_depth = model->depths[pt->dep_idx];
+    float real_lat   = model->latitudes[pt->lat_idx];
+    float real_lon   = model->longitudes[pt->lon_idx];
 
-    return offset;
+    float val_vp = 0.0f;
+    float val_vs = 0.0f;
+    float val_rho = 0.0f;
+    uint64_t bytes_vp = sizeof(float);
+    uint64_t bytes_vs = sizeof(float);
+    uint64_t bytes_rho = sizeof(float);
+
+    tiledb_query_alloc(model->tiledb_ctx, model->tiledb_array, TILEDB_READ, &query);
+    tiledb_query_set_layout(model->tiledb_ctx, query, TILEDB_ROW_MAJOR);
+    tiledb_subarray_alloc(model->tiledb_ctx, model->tiledb_array, &subarray);
+
+    int32_t depth_range[] = {pt->dep_idx, pt->dep_idx};
+    int32_t lat_range[]   = {pt->lat_idx, pt->lat_idx};
+    int32_t lon_range[]   = {pt->lon_idx, pt->lon_idx};
+
+    tiledb_subarray_add_range(model->tiledb_ctx, subarray, 0, &depth_range[0], &depth_range[1], NULL);
+    tiledb_subarray_add_range(model->tiledb_ctx, subarray, 1, &lat_range[0],  &lat_range[1],  NULL);
+    tiledb_subarray_add_range(model->tiledb_ctx, subarray, 2, &lon_range[0],  &lon_range[1],  NULL);
+    tiledb_query_set_subarray_t(model->tiledb_ctx, query, subarray);
+
+    tiledb_query_set_data_buffer(model->tiledb_ctx, query, "vp", &val_vp, &bytes_vp);
+    tiledb_query_set_data_buffer(model->tiledb_ctx, query, "vs", &val_vs, &bytes_vs);
+    tiledb_query_set_data_buffer(model->tiledb_ctx, query, "rho", &val_rho, &bytes_rho);
+
+    if (tiledb_query_submit(model->tiledb_ctx, query) != TILEDB_OK) {
+        tiledb_error_t* err = NULL;
+        tiledb_ctx_get_last_error(model->tiledb_ctx, &err);
+        const char* msg = NULL;
+        tiledb_error_message(err, &msg);
+        fprintf(stderr, "[ERROR] TileDB query read failed: %s\n", msg);
+        tiledb_error_free(&err);
+    } else {
+
+        tiledb_query_status_t status;
+        tiledb_query_get_status(model->tiledb_ctx, query, &status);
+
+        if (status == TILEDB_COMPLETED) {
+            if(muscal_ucvm_debug) {
+                fprintf(stderrfp,"Array Indices    -> Depth Idx: %d | Lat Idx: %d | Lon Idx: %d\n", 
+                   pt->dep_idx, pt->lat_idx, pt->lon_idx);
+                fprintf(stderrfp,"Physical Coords  -> Depth: %.2f | Latitude: %.4f | Longitude: %.4f\n", 
+                   real_depth, real_lat, real_lon);
+                fprintf(stderrfp,"Material Values  -> VP  : %f m/s\n", val_vp);
+                fprintf(stderrfp,"                    VS  : %f m/s\n", val_vs);
+                fprintf(stderrfp,"                    RHO : %f kg/m^3\n", val_rho);
+            }
+            data->vp=val_vp;
+            data->vs=val_vs;
+            data->rho=val_rho;
+            } else {
+                fprintf(stderr, "[ERROR] Query finished with unexpected status flag: %d\n", status);
+            }
+    }
+
+    if (subarray) tiledb_subarray_free(&subarray);
+    if (query) tiledb_query_free(&query);
 }
 
-int get_one_property(muscal_dataset_t *dataset, muscal_pt_info_t *pt, muscal_properties_t *data) {
-    int offset= _buffer_offset(dataset, pt->lon_idx, pt->lat_idx, pt->dep_idx);
-
-    data->vp=dataset->vp_buffer[offset];
-    data->vs=dataset->vs_buffer[offset];
-    data->rho=dataset->rho_buffer[offset];
-    return offset;
-}
-
-int get_one_muscal1d_property(muscal_dataset_t *dataset, muscal_pt_info_t *pt, muscal_properties_t *data) {
-    if(muscal_ucvm_debug) { fprintf(stderrfp,"\ncalling get_one_muscal1d_property\n"); }
+int get_1dnn_property(muscal_dataset_t *model, muscal_pt_info_t *pt, muscal_properties_t *data) {
+    if(muscal_ucvm_debug) { fprintf(stderrfp,"\ncalling get_1dnn_property\n"); }
 
     KDVec3 *best=NULL;
     float best_dist=FLT_MAX;
     int best_idx=0;
 
     KDVec3 query;
-    KDNodeSetup *kdsurface=dataset->kdsurface;
+    KDNodeSetup *kdsurface=model->kdsurface;
     KDlld *pnts=kdsurface->pnts;
 
-// bound the depth idx to nearest layer.. for pt->dep < 50
-    float target_dep=pt->dep;
-    if( pt->dep < 50 ) {
-      int dep_idx=find_buffer_idx_clamped(dataset->depths,dataset->nz,pt->dep);
-      target_dep=dataset->depths[dep_idx];
-    }
-
-    lld_to_xyz(&query, pt->lat, pt->lon, target_dep, 0);
-
+    lld_to_xyz(&query, pt->lat, pt->lon, pt->dep, 0);
     kdtree_nearest(kdsurface->nodes, &query, &best, &best_dist);
     best_idx=best->lldindex;
 
     if(muscal_ucvm_debug) { 
-      fprintf(stderrfp,"\nFOUND: %d(%lf):   %lf %lf %lf\n", best_idx, best_dist, pnts[best_idx].lon, pnts[best_idx].lat, pnts[best_idx].depth);
-fprintf(stderr,"\nFOUND: %d(%lf):   %lf %lf %lf\n", best_idx, best_dist, pnts[best_idx].lon, pnts[best_idx].lat, pnts[best_idx].depth);
+      fprintf(stderrfp,"FOUND: %d(%lf):   %lf %lf %lf\n\n", best_idx, best_dist, 
+                         pnts[best_idx].lon, pnts[best_idx].lat, pnts[best_idx].depth);
     }
 
     data->vp=pnts[best_idx].vp;
@@ -216,7 +307,129 @@ fprintf(stderr,"\nFOUND: %d(%lf):   %lf %lf %lf\n", best_idx, best_dist, pnts[be
 }
 
 
-float _interp_a_point(muscal_dataset_t *dataset, float *buffer, muscal_pt_info_t *pt) {
+// Helper to access flattened 3D array index [d][lat][lon] for a 2x2x2 cube
+#define CUBE_INDEX(d, lat, lon) ((d) * 4 + (lat) * 2 + (lon))
+int get_interp_property(muscal_dataset_t *model, muscal_pt_info_t *pt, muscal_properties_t *data) {
+
+    float target_depth=pt->dep;
+    float target_lat=pt->lat;
+    float target_lon=pt->lon;
+    int dep_idx = pt->dep_idx;
+    int lat_idx = pt->lat_idx;
+    int lon_idx = pt->lon_idx;
+
+    // Boundary checks to ensure 2x2x2 cube fits within bounds
+    if (dep_idx < 0 || dep_idx >= model->nz - 1 ||
+        lat_idx < 0 || lat_idx >= model->ny - 1 ||
+        lon_idx < 0 || lon_idx >= model->nx - 1) {
+        fprintf(stderr, "[ERROR] Target coordinates outside interpolatable range.\n");
+        return -1;
+    }
+
+    // 2. Compute normalized weights [0.0, 1.0]
+    float dep_percent   = pt->dep_percent;
+    float lat_percent = pt->lat_percent;
+    float lon_percent = pt->lon_percent;
+
+    // 3. Query the 2x2x2 (8 elements) range from TileDB
+    tiledb_query_t* query = NULL;
+    tiledb_subarray_t* subarray = NULL;
+
+    float val_vp[8]  = {0.0f};
+    float val_vs[8]  = {0.0f};
+    float val_rho[8] = {0.0f};
+
+    uint64_t bytes_vp  = sizeof(val_vp);
+    uint64_t bytes_vs  = sizeof(val_vs);
+    uint64_t bytes_rho = sizeof(val_rho);
+
+    tiledb_query_alloc(model->tiledb_ctx, model->tiledb_array, TILEDB_READ, &query);
+    tiledb_query_set_layout(model->tiledb_ctx, query, TILEDB_ROW_MAJOR);
+    tiledb_subarray_alloc(model->tiledb_ctx, model->tiledb_array, &subarray);
+
+    int32_t depth_range[] = {dep_idx, dep_idx + 1};
+    int32_t lat_range[]   = {lat_idx, lat_idx + 1};
+    int32_t lon_range[]   = {lon_idx, lon_idx + 1};
+
+    tiledb_subarray_add_range(model->tiledb_ctx, subarray, 0, &depth_range[0], &depth_range[1], NULL);
+    tiledb_subarray_add_range(model->tiledb_ctx, subarray, 1, &lat_range[0],   &lat_range[1],   NULL);
+    tiledb_subarray_add_range(model->tiledb_ctx, subarray, 2, &lon_range[0],   &lon_range[1],   NULL);
+    tiledb_query_set_subarray_t(model->tiledb_ctx, query, subarray);
+
+    tiledb_query_set_data_buffer(model->tiledb_ctx, query, "vp",  val_vp,  &bytes_vp);
+    tiledb_query_set_data_buffer(model->tiledb_ctx, query, "vs",  val_vs,  &bytes_vs);
+    tiledb_query_set_data_buffer(model->tiledb_ctx, query, "rho", val_rho, &bytes_rho);
+
+    if (tiledb_query_submit(model->tiledb_ctx, query) != TILEDB_OK) {
+        tiledb_error_t* err = NULL;
+        tiledb_ctx_get_last_error(model->tiledb_ctx, &err);
+        const char* msg = NULL;
+        tiledb_error_message(err, &msg);
+        fprintf(stderr, "[ERROR] TileDB query read failed: %s\n", msg);
+        tiledb_error_free(&err);
+        if (subarray) tiledb_subarray_free(&subarray);
+        if (query) tiledb_query_free(&query);
+        return -1;
+    }
+
+    tiledb_query_status_t status;
+    tiledb_query_get_status(model->tiledb_ctx, query, &status);
+
+    if (status != TILEDB_COMPLETED) {
+        fprintf(stderr, "[ERROR] Query finished with status: %d\n", status);
+        if (subarray) tiledb_subarray_free(&subarray);
+        if (query) tiledb_query_free(&query);
+        return -1;
+    }
+
+    // Cleanup TileDB resources
+    tiledb_subarray_free(&subarray);
+    tiledb_query_free(&query);
+
+    // 4. Perform Trilinear Interpolation Math
+    // Standard formula combining 8 corner values with weights
+    float interp_vp  = 0.0f;
+    float interp_vs  = 0.0f;
+    float interp_rho = 0.0f;
+
+    for (int d = 0; d < 2; ++d) {
+        float wd = (d == 0) ? (1.0f - dep_percent) : dep_percent;
+        for (int lat = 0; lat < 2; ++lat) {
+            float wlat = (lat == 0) ? (1.0f - lat_percent) : lat_percent;
+            for (int lon = 0; lon < 2; ++lon) {
+                float wlon = (lon == 0) ? (1.0f - lon_percent) : lon_percent;
+
+                float weight = wd * wlat * wlon;
+                int idx = CUBE_INDEX(d, lat, lon);
+
+                interp_vp  += val_vp[idx]  * weight;
+                interp_vs  += val_vs[idx]  * weight;
+                interp_rho += val_rho[idx] * weight;
+            }
+        }
+    }
+
+    // Save final interpolated values
+    data->vp  = interp_vp;
+    data->vs  = interp_vs;
+    data->rho = interp_rho;
+
+    return 0;
+}
+
+// OLD CODE
+int _buffer_offset(muscal_dataset_t *model, int x_idx, int  y_idx, int z_idx) {
+    int nx=model->nx;
+    int ny=model->ny;
+    int nz=model->nz;
+    
+    int offset= (z_idx)*(ny * nx)+(y_idx)*(nx)+x_idx;
+    if(muscal_ucvm_debug) { fprintf(stderrfp,"\nTarget offset %d : idx lon/lat/dep = %d/%d/%d\n", offset,x_idx, y_idx, z_idx); }
+    
+    return offset;
+}   
+
+float _interp_a_point(muscal_dataset_t *model, float *buffer, muscal_pt_info_t *pt) {
     int lon_idx=pt->lon_idx;
     int lat_idx=pt->lat_idx;
     int dep_idx=pt->dep_idx;
@@ -225,19 +438,19 @@ float _interp_a_point(muscal_dataset_t *dataset, float *buffer, muscal_pt_info_t
     float dep_percent=pt->dep_percent;
 
     if(pt->lon_idx < 0 || pt->lat_idx < 0 || pt->dep_idx < 0 ||
-         pt->lon_idx +1 >= dataset->nx || pt->lat_idx +1 >= dataset->ny || pt->dep_idx+1 >= dataset->nz ) {
+         pt->lon_idx +1 >= model->nx || pt->lat_idx +1 >= model->ny || pt->dep_idx+1 >= model->nz ) {
         // out of bound
         return -1;	
     }
 
-    float val0= buffer[_buffer_offset(dataset,lon_idx,lat_idx,dep_idx)];      // x,    y, z
-    float val1= buffer[_buffer_offset(dataset,lon_idx+1,lat_idx,dep_idx)];    // x+1,  y, z 
-    float val2= buffer[_buffer_offset(dataset,lon_idx,lat_idx+1,dep_idx)];    // x,  y+1, z 
-    float val3= buffer[_buffer_offset(dataset,lon_idx+1,lat_idx+1,dep_idx)];  // x+1,y+1, z
-    float val4= buffer[_buffer_offset(dataset,lon_idx,lat_idx,dep_idx+1)];    // x,    y, z+1
-    float val5= buffer[_buffer_offset(dataset,lon_idx+1,lat_idx,dep_idx+1)];  // x+1,  y, z+1
-    float val6= buffer[_buffer_offset(dataset,lon_idx,lat_idx+1,dep_idx+1)];  // x,  y+1, z+1
-    float val7= buffer[_buffer_offset(dataset,lon_idx+1,lat_idx+1,dep_idx+1)];// x+1,y+1, z+1
+    float val0= buffer[_buffer_offset(model,lon_idx,lat_idx,dep_idx)];      // x,    y, z
+    float val1= buffer[_buffer_offset(model,lon_idx+1,lat_idx,dep_idx)];    // x+1,  y, z 
+    float val2= buffer[_buffer_offset(model,lon_idx,lat_idx+1,dep_idx)];    // x,  y+1, z 
+    float val3= buffer[_buffer_offset(model,lon_idx+1,lat_idx+1,dep_idx)];  // x+1,y+1, z
+    float val4= buffer[_buffer_offset(model,lon_idx,lat_idx,dep_idx+1)];    // x,    y, z+1
+    float val5= buffer[_buffer_offset(model,lon_idx+1,lat_idx,dep_idx+1)];  // x+1,  y, z+1
+    float val6= buffer[_buffer_offset(model,lon_idx,lat_idx+1,dep_idx+1)];  // x,  y+1, z+1
+    float val7= buffer[_buffer_offset(model,lon_idx+1,lat_idx+1,dep_idx+1)];// x+1,y+1, z+1
         
     float val00= val0 * (1-lon_percent) + val1 * lon_percent;    
     float val11= val4 * (1-lon_percent) + val5 * lon_percent;    
@@ -249,142 +462,4 @@ float _interp_a_point(muscal_dataset_t *dataset, float *buffer, muscal_pt_info_t
 
     float val0000 = val000 * (1-dep_percent) + val111 * dep_percent;
     return val0000;
-}
-
-void get_interp_property(muscal_dataset_t *dataset, muscal_pt_info_t *pt, muscal_properties_t *data) {
-
-    if(muscal_ucvm_debug) { fprintf(stderrfp,"\nInterp PROCESSING for vp\n"); }
-    data->vp = _interp_a_point(dataset, dataset->vp_buffer, pt);
-    if(muscal_ucvm_debug) { fprintf(stderrfp,"\nInterp PROCESSING for vs\n"); }
-    data->vs = _interp_a_point(dataset, dataset->vs_buffer, pt);
-    if(muscal_ucvm_debug) { fprintf(stderrfp,"\nInterp PROCESSING for rho\n"); }
-    data->rho = _interp_a_point(dataset, dataset->rho_buffer, pt);
-    return;
-}
-
-
-/**** for muscal_cache_col_t ****/
-muscal_cache_col_t *_add_a_cache_col(muscal_dataset_t *dataset, int target_lat_idx, int target_lon_idx) {
- 
-   int nz=dataset->nz;
-
-   muscal_cache_col_t *col= (muscal_cache_col_t *) malloc(sizeof(muscal_cache_col_t));
-
-   col->cache_col_lat_idx=target_lat_idx;
-   col->cache_col_lon_idx=target_lon_idx;
-
-   // alloc space first 
-   col->col_vp_buffer=(float *) malloc(nz * sizeof(float));
-   col->col_vs_buffer=(float *) malloc(nz * sizeof(float));
-   col->col_rho_buffer=(float *) malloc(nz * sizeof(float));
-
-   cache_depth_col_float(dataset->ncid, dataset->vp_varid,
-                        nz, target_lat_idx, target_lon_idx, col->col_vp_buffer);
-   cache_depth_col_float(dataset->ncid, dataset->vs_varid,
-                        nz, target_lat_idx, target_lon_idx, col->col_vs_buffer);
-   cache_depth_col_float(dataset->ncid, dataset->rho_varid,
-                        nz, target_lat_idx, target_lon_idx, col->col_rho_buffer);
-   return col;
-}
-
-muscal_cache_col_t *find_a_cache_col(muscal_dataset_t *dataset, int target_lat_idx, int target_lon_idx) {
-
-   int cnt= dataset->col_cache_cnt; 
-   muscal_cache_col_t *col;
-
-   for(int i=0; i< cnt; i++) {
-     col=dataset->col_cache[i];
-     if((col->cache_col_lat_idx == target_lat_idx) &&
-		      (col->cache_col_lon_idx == target_lon_idx) ) {
-        // found it
-        return col;
-     }
-   }
-   // load it from the netcdf file
-   col=_add_a_cache_col(dataset, target_lat_idx, target_lon_idx);
-    
-   // find a space to put in (in case it is full)
-   if( cnt < MUSCAL_CACHE_COL_MAX) {
-       dataset->col_cache[cnt]=col;
-       dataset->col_cache_cnt=cnt+1;
-       } else {
-// else has to free one out
-         int use_idx=(cnt+1) % MUSCAL_CACHE_COL_MAX;
-         free_a_cache_col(dataset->col_cache[use_idx]);
-         dataset->col_cache[use_idx]=col;
-
-   }
-
-   return col;     
-}
-
-void free_a_cache_col(muscal_cache_col_t *col) {
-
-   // free buffer first 
-   free(col->col_vp_buffer);
-   free(col->col_vs_buffer);
-   free(col->col_rho_buffer);
-
-   free(col);
-}
-
-/**** for muscal_cache_layer_t ****/
-muscal_cache_layer_t *_add_a_cache_layer(muscal_dataset_t *dataset, int target_dep_idx) {
-
-    int nx=dataset->nx;
-    int ny=dataset->ny;
-
-    if(muscal_ucvm_debug) { fprintf(stderrfp, "  Loading a new layer: %zu\n", target_dep_idx); }
-    muscal_cache_layer_t *layer= (muscal_cache_layer_t *) malloc(sizeof(muscal_cache_layer_t));
-
-    layer->cache_layer_dep_idx=target_dep_idx;
-
-    layer->layer_vp_buffer = (float * )malloc((nx*ny) * sizeof(float));
-    layer->layer_vs_buffer = (float * )malloc((nx*ny) * sizeof(float));
-    layer->layer_rho_buffer = (float * )malloc((nx*ny) * sizeof(float));
-
-    cache_latlon_layer_float(dataset->ncid, dataset->vp_varid,
-                      target_dep_idx, ny, nx, layer->layer_vp_buffer);
-    cache_latlon_layer_float(dataset->ncid, dataset->vs_varid,
-                      target_dep_idx, ny, nx, layer->layer_vs_buffer);
-    cache_latlon_layer_float(dataset->ncid, dataset->rho_varid,
-                      target_dep_idx, ny, nx, layer->layer_rho_buffer);
-    return layer;
-}
-
-muscal_cache_layer_t *find_a_cache_layer(muscal_dataset_t *dataset, int target_dep_idx) {
-
-   int cnt= dataset->layer_cache_cnt;
-   muscal_cache_layer_t *layer;
-
-   for(int i=0; i< cnt; i++) {
-     layer=dataset->layer_cache[i];
-     if((layer->cache_layer_dep_idx == target_dep_idx) ) {
-        // found it
-        return layer;
-     }
-   }
-   // load it from the netcdf file
-   layer=_add_a_cache_layer(dataset, target_dep_idx);
-
-   // find a space to put in (in case it is full)
-   if( cnt < MUSCAL_CACHE_LAYER_MAX) {
-       dataset->layer_cache[cnt]=layer;
-       dataset->layer_cache_cnt=cnt+1;
-       } else {
-// else has to free one out
-         int use_idx=(cnt+1) % MUSCAL_CACHE_LAYER_MAX;
-         free_a_cache_layer(dataset->layer_cache[use_idx]);
-         dataset->layer_cache[use_idx]=layer;
-   }
-   return layer;     
-}
-
-void free_a_cache_layer(muscal_cache_layer_t *layer) {
-
-   free(layer->layer_vp_buffer);
-   free(layer->layer_vs_buffer);
-   free(layer->layer_rho_buffer);
-
-   free(layer);
 }

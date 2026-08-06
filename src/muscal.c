@@ -10,14 +10,14 @@
 #include <limits.h>
 #include "ucvm_model_dtypes.h"
 #include "muscal.h"
-#include "muscal_dataset.h"
-#include "muscal_util.h"
-#include "um_netcdf.h"
 #include "cJSON.h"
 
 int muscal_ucvm_debug=0;
+int muscal_ucvm_debug_stats=0;
 int muscal_ucvm_debug_detail=0;
 FILE *stderrfp=NULL;
+
+char *tiledb_stats_json = NULL;
 
 /** The config of the model */
 char *muscal_config_string=NULL;
@@ -35,8 +35,8 @@ char muscal_data_directory[128];
 
 /** Configuration parameters. */
 muscal_configuration_t *muscal_configuration;
-/** Holds pointers to the velocity model data OR indicates it can be read from file. */
-muscal_model_t *muscal_velocity_model;
+/** Holds all info extracted from tiledb data */
+muscal_dataset_t *muscal_dataset;
 
 /**
  * Initializes the muscal plugin model within the UCVM framework. In order to initialize
@@ -52,10 +52,12 @@ int muscal_init(const char *dir, const char *label) {
     char configbuf[512];
     double north_height_m = 0, east_width_m = 0, rotation_angle = 0;
 
-    if(muscal_ucvm_debug) {
+    if(muscal_ucvm_debug || muscal_ucvm_debug_stats){
       stderrfp = fopen("muscal_debug.log", "w+");
       fprintf(stderrfp,"\n===== START muscal ===== \n\n");
     }
+
+    if(muscal_ucvm_debug_stats){ tiledb_stats_enable(); }
 
     // Initialize variables.
     
@@ -63,9 +65,6 @@ int muscal_init(const char *dir, const char *label) {
     muscal_config_string = calloc(MUSCAL_CONFIG_MAX, sizeof(char));
     muscal_config_string[0]='\0';
     muscal_config_sz=0;
-
-    muscal_velocity_model = calloc(1, sizeof(muscal_model_t));
-    muscal_velocity_model_init(muscal_velocity_model);
 
     // Configuration file location.
     sprintf(configbuf, "%s/model/%s/data/config", dir, label);
@@ -86,17 +85,14 @@ int muscal_init(const char *dir, const char *label) {
            sprintf(muscal_data_directory, "%s/model/%s/data/%s", dir, label, muscal_configuration->model_dir);
     }
 
-    // Can we allocate the model, or parts of it, to memory. If so, we do.
-    muscal_velocity_model->dataset_cnt=muscal_configuration->dataset_cnt;
-    tempVal = muscal_read_model(muscal_configuration, muscal_velocity_model, muscal_data_directory);
-
-    if (tempVal == SUCCESS) {
-      if(muscal_ucvm_debug) {
-        fprintf(stderrfp, "Setup model file\n");
-      }
-    } else if (tempVal == FAIL) {
+    muscal_dataset = muscal_read_dataset(muscal_data_directory, muscal_configuration->dataset_file);
+    if (muscal_dataset == NULL) {
         muscal_print_error("No model file was found to read from.");
         return FAIL;
+    }
+    if( muscal_configuration->enable_1d) {
+        muscal_read_surface(muscal_dataset, muscal_configuration->surface_count,
+                muscal_data_directory, muscal_configuration->surface_file);
     }
 
     // setup config_string 
@@ -121,32 +117,14 @@ int muscal_query(muscal_point_t *points, muscal_properties_t *data, int numpoint
 
 if(muscal_ucvm_debug){ fprintf(stderrfp,"\ncalling muscal_query with %d numpoints\n",numpoints); }
 
-    int data_idx = 0;
-    nc_type vtype=NC_FLOAT;
+    muscal_dataset_t *model=muscal_dataset;
 
-    /* iterate through the dataset to see where does the point fall into */
-    /* for now assume there is only 1 dataset */
-    muscal_dataset_t *dataset= muscal_velocity_model->datasets[data_idx];
-
-    float *lon_list=dataset->longitudes;
-    float *lat_list=dataset->latitudes;
-    float *dep_list=dataset->depths;
-    int nx=dataset->nx;
-    int ny=dataset->ny;
-    int nz=dataset->nz;
-
-    // hold current working buffers
-    float *tmp_vp_buffer=NULL;
-    float *tmp_vs_buffer=NULL;
-    float *tmp_rho_buffer=NULL;
-
-    int first_lon_idx;
-    int first_lat_idx;
-    int first_dep_idx;
-
-    int same_lon_idx=1;
-    int same_lat_idx=1;
-    int same_dep_idx=1;
+    float *lon_list=model->longitudes;
+    float *lat_list=model->latitudes;
+    float *dep_list=model->depths;
+    int nx=model->nx;
+    int ny=model->ny;
+    int nz=model->nz;
 
     int lon_idx;
     int lat_idx;
@@ -169,128 +147,51 @@ if(muscal_ucvm_debug){ fprintf(stderrfp,"\ncalling muscal_query with %d numpoint
         pt_info[i].lon=points[i].longitude;
         pt_info[i].lat=points[i].latitude;
         pt_info[i].dep=points[i].depth;
+        if(muscal_ucvm_debug_stats) {
+            fprintf(stderrfp,"POINT: %lf %lf %lf\n", points[i].longitude,points[i].latitude,points[i].depth);
+        }
 
         pt_info[i].lon_idx=find_buffer_idx_clamped(lon_list,nx,pt_info[i].lon);
         pt_info[i].lat_idx=find_buffer_idx_clamped(lat_list,ny,pt_info[i].lat);
         pt_info[i].dep_idx=find_buffer_idx_clamped(dep_list,nz,pt_info[i].dep);
 
-	/* check if out of range */
-	if(pt_info[i].lon_idx < 0 || pt_info[i].lat_idx < 0 || pt_info[i].dep_idx < 0) {
+     /* check if out of range */
+        if(pt_info[i].lon_idx < 0 || pt_info[i].lat_idx < 0 || pt_info[i].dep_idx < 0) {
           continue;
         }
 
-        if(i==0) {
-            first_dep_idx=pt_info[i].dep_idx;
-            first_lon_idx=pt_info[i].lon_idx;
-            first_lat_idx=pt_info[i].lat_idx;
-        }
-
-        if(pt_info[i].dep_idx != first_dep_idx) same_dep_idx=0;
-        if(pt_info[i].lon_idx != first_lon_idx) same_lon_idx=0;
-        if(pt_info[i].lat_idx != first_lat_idx) same_lat_idx=0;
-
-	if(muscal_configuration->interpolation) { // fill cell percent
+        if(muscal_configuration->interpolation) { // fill cell percent
             pt_info[i].lon_percent=find_cell_percent(lon_list,pt_info[i].lon,pt_info[i].lon_idx);
             pt_info[i].lat_percent=find_cell_percent(lat_list,pt_info[i].lat,pt_info[i].lat_idx);
             pt_info[i].dep_percent=find_cell_percent(dep_list,pt_info[i].dep,pt_info[i].dep_idx);
         }
     }
 
-// handle access 
-// if not too_big, grab from in-memory buffer one at a time
-// if too_big, then collect up all the index list and make just one call and
-// retrieve and disperse the result back into data
-
-    if(!muscal_configuration->too_big) { 
-
-if(muscal_ucvm_debug){ fprintf(stderrfp,">> Using In-Memory access \n"); }
-
-        // should be in the in-memory 
-        for(int i=0; i<numpoints; i++) {
-            if(!muscal_configuration->interpolation) { 
-		// no interp
-                get_one_property(dataset, &(pt_info[i]), &(data[i]));
-                } else {
-                    get_interp_property(dataset, &(pt_info[i]), &(data[i]));
-            }
-
-	    // If result is None, then need to process for muscal1d
-	    // with muscal1d with depth
-            if(isnan(data[i].vp) && isnan(data[i].vs) && muscal_configuration->enable_1d) {
-
-if(muscal_ucvm_debug){ fprintf(stderrfp,">> calling get_one_nuscal1d_property\n"); }
-                get_one_muscal1d_property(dataset, &(pt_info[i]), &(data[i]));
-            }
+    // should be in the in-memory 
+    for(int i=0; i<numpoints; i++) {
+        if(!muscal_configuration->interpolation) { 
+        // no interp
+            get_one_property(model, &(pt_info[i]), &(data[i]));
+            } else {
+                get_interp_property(model, &(pt_info[i]), &(data[i]));
         }
 
-    } else { 
+// If result is None, then need to process
+// with 1d nearest neighbor surface property
+        if(isnan(data[i].vp) && isnan(data[i].vs) && muscal_configuration->enable_1d) {
+            get_1dnn_property(model, &(pt_info[i]), &(data[i]));
+        }
+    } 
 
-//
-// WARNING : no interpolation is done, for MUSCAL, THIS SHOULD NOT BE USED 
-// EXCEPT FOR TESTING
-//
-// It is too big, extract data from external data file 
-// group netcdf access to 
-//   column based(same lat idx an same lon idx),
-//   or
-//   layer based(same depth idx) 
-//   or random method
-
-// if same_lon_idx and same_lat_idx,
-// it is depth profile
-//    extract the whole column with dataset->nz for different set 
-//    and then extract data from buffer one at a time using dep_idx 
-        if(same_lon_idx && same_lat_idx ) {
-          // grab a col from cache
-            muscal_cache_col_t *col=find_a_cache_col(dataset, first_lat_idx, first_lon_idx); 
-if(muscal_ucvm_debug){ fprintf(stderrfp,">> Using External data/Col cache - col idx=%d\n", dataset->col_cache_cnt); }
-          
-            tmp_vp_buffer=col->col_vp_buffer;
-            tmp_vs_buffer=col->col_vs_buffer;
-            tmp_rho_buffer=col->col_rho_buffer;
-
-            for(int i=0; i<numpoints; i++) { 
-                offset=pt_info[i].dep_idx;
-                data[i].vp = tmp_vp_buffer[offset];
-                data[i].vs = tmp_vs_buffer[offset];
-                data[i].rho =tmp_rho_buffer[offset];
-            }
-
-// if just same_dep_idx, it is a horizontal slice,
-// extract the whole layer using dataset->nx and dataset->ny
-// and then extract data from buffer using lon_idx, and lat_idx
-        } else if (same_dep_idx) { 
-          // grab a layer from cache or try to load it from external data file
-            muscal_cache_layer_t *layer=find_a_cache_layer(dataset, first_dep_idx);
-
-if(muscal_ucvm_debug){ fprintf(stderrfp,">> Using External data/Layer cache - current count=%d\n", dataset->layer_cache_cnt); }
-            tmp_vp_buffer=layer->layer_vp_buffer;
-            tmp_vs_buffer=layer->layer_vs_buffer;
-            tmp_rho_buffer=layer->layer_rho_buffer;
-
-            for(int i=0; i<numpoints; i++) { 
-                lat_idx=pt_info[i].lat_idx;
-                lon_idx=pt_info[i].lon_idx;
-                offset= (lat_idx * nx) + lon_idx;
-
-                data[i].vp = tmp_vp_buffer[offset];
-                data[i].vs = tmp_vs_buffer[offset];
-                data[i].rho =tmp_rho_buffer[offset];
-            }
-        } else {  
-// a very special case, it is random target ie. a vertical slice 
-// handle it as random and so just default to per location access
-if(muscal_ucvm_debug){ fprintf(stderrfp,">> Using External data/Random call \n"); }
-            for(int i=0; i<numpoints; i++) { 
-                lon_idx=pt_info[i].lon_idx;
-                lat_idx=pt_info[i].lat_idx;
-                dep_idx=pt_info[i].dep_idx;
-                data[i].vp=get_nc_vara_float(dataset->ncid, dataset->vp_varid, dep_idx, lat_idx, lon_idx);
-                data[i].vs=get_nc_vara_float(dataset->ncid, dataset->vs_varid, dep_idx, lat_idx, lon_idx);
-                data[i].rho=get_nc_vara_float(dataset->ncid, dataset->rho_varid, dep_idx, lat_idx, lon_idx);
-            }
-         }
-    }
+    if(muscal_ucvm_debug_stats){
+        fprintf(stderrfp,"--TileDB Query Performance Stats --\n");
+        //tiledb_stats_dump(stderrfp);
+        //tiledb_stats_raw_dump_str(&tiledb_stats_json);
+        if(tiledb_stats_json != NULL) {
+           fprintf(stderrfp,"JSON stats: \n   %s\n", tiledb_stats_json);
+           tiledb_stats_free_str(&tiledb_stats_json);
+        }
+    }   
 
     return SUCCESS;
 }
@@ -313,14 +214,16 @@ int muscal_finalize() {
     if (muscal_configuration) {
         muscal_configuration_finalize(muscal_configuration);
     }
-    if (muscal_velocity_model) {
-        muscal_velocity_model_finalize(muscal_velocity_model);
+    if (muscal_dataset) {
+        free_muscal_dataset(muscal_dataset);
     }
 
-    if(muscal_ucvm_debug) {
+    if(muscal_ucvm_debug || muscal_ucvm_debug_stats){
      fprintf(stderrfp,"::DONE::\n"); 
      fclose(stderrfp);
     }
+
+    if(muscal_ucvm_debug_stats){ tiledb_stats_disable(); }   
 
     return SUCCESS;
 }
@@ -377,7 +280,6 @@ int muscal_read_configuration(char *file, muscal_configuration_t *config) {
     char key[40];
     char value[1000];
     char line_holder[2000];
-    config->dataset_cnt=0;
 
     // If our file pointer is null, an error has occurred. Return fail.
     if (fp == NULL) { return UCVM_MODEL_CODE_ERROR; }
@@ -398,36 +300,23 @@ int muscal_read_configuration(char *file, muscal_configuration_t *config) {
 if(muscal_ucvm_debug){ fprintf(stderrfp, "enabled Interpolation\n"); }
                 }
             }
-            if (strcmp(key, "binary_data") == 0) { 
-                config->use_binary=0;
-                if (strcmp(value,"on") == 0) { config->use_binary=1;
-if(muscal_ucvm_debug){ fprintf(stderrfp, "enabled Binary data\n"); }
-                }
-            }
-            if (strcmp(key, "too_big") == 0) { 
-                config->too_big=0;
-                if (strcmp(value,"on") == 0) { config->too_big=1;
-if(muscal_ucvm_debug){ fprintf(stderrfp, "enabled tooBig -- use external data access\n"); }
-                }
-            }
             if (strcmp(key, "enable_1d") == 0) { 
                 config->enable_1d=0;
                 if (strcmp(value,"on") == 0) { config->enable_1d=1;
 if(muscal_ucvm_debug){ fprintf(stderrfp, "enabled muscal1d to fill all empty returns\n"); }
                 }
             }
-         /* for each dataset, allocate a model dataset's block and fill in */ 
+         /* get data for the dataset */
             if (strcmp(key, "data_file") == 0) { 
-                if( config->dataset_cnt < MUSCAL_DATASET_MAX) {
                   int rc=_setup_a_dataset(config,value);
-                  if(rc == 1 ) { config->dataset_cnt++; }
-                } else { muscal_print_error("Exceeded dataset maximum limit."); }
-	    } 
+                  if(rc !=1 ) { muscal_print_error("BAD data_file."); }
+         } 
         }
     }
 
     // Have we set up all muscal_configuration parameters?
-    if (config->utm_zone == 0 || config->model_dir[0] == '\0' || config->dataset_cnt == 0 ) {
+    if (config->utm_zone == 0 || (strcmp(config->model_dir,"")==0) ||
+        config->dataset_file == NULL  || config->dataset_label == NULL ) {
         muscal_print_error("One muscal_configuration parameter not specified. Please check your muscal_configuration file.");
         return UCVM_MODEL_CODE_ERROR;
     }
@@ -437,7 +326,7 @@ if(muscal_ucvm_debug){ fprintf(stderrfp, "enabled muscal1d to fill all empty ret
 }
 
 /**
- * Extract muscal netcdf dataset specific info
+ * Extract muscal dataset specific info
  * and fill in the model info, one dataset at a time
  * and allocate required memory space
  *
@@ -446,9 +335,8 @@ if(muscal_ucvm_debug){ fprintf(stderrfp, "enabled muscal1d to fill all empty ret
 int _setup_a_dataset(muscal_configuration_t *config, char *blobstr) {
     /* parse the blob and grab the meta data */
     cJSON *confjson=cJSON_Parse(blobstr);
-    int idx=config->dataset_cnt;
 
-    /* grab the related netcdf file and extract dataset info */
+    /* grab the related file and extract dataset info */
     if(confjson == NULL) {
         const char *eptr = cJSON_GetErrorPtr();
         if(eptr != NULL) {
@@ -459,23 +347,23 @@ int _setup_a_dataset(muscal_configuration_t *config, char *blobstr) {
 
     cJSON *label = cJSON_GetObjectItemCaseSensitive(confjson, "LABEL");
     if(cJSON_IsString(label)){
-        config->dataset_labels[idx]=strdup(label->valuestring);
+        config->dataset_label=strdup(label->valuestring);
     }
     cJSON *file = cJSON_GetObjectItemCaseSensitive(confjson, "FILE");
     if(cJSON_IsString(file)){
-        config->dataset_files[idx]=strdup(file->valuestring);
+        config->dataset_file=strdup(file->valuestring);
     }
     cJSON *surface = cJSON_GetObjectItemCaseSensitive(confjson, "SURFACE");
     if(cJSON_IsString(surface)){
-        config->surface_files[idx]=strdup(surface->valuestring);
+        config->surface_file=strdup(surface->valuestring);
         } else {
-            config->surface_files[idx]=NULL;
+            config->surface_file=NULL;
     }
     cJSON *surface_count = cJSON_GetObjectItemCaseSensitive(confjson, "SURFACE_COUNT");
     if(cJSON_IsNumber(surface_count)) {
-        config->surface_counts[idx]=surface_count->valueint;
+        config->surface_count=surface_count->valueint;
         } else {
-          config->surface_counts[idx]=0;
+          config->surface_count=0;
     }
     return 1;
 }
@@ -516,73 +404,18 @@ void _splitline(char* lptr, char key[], char value[]) {
   _trimLast(value,' ');
 }
 
-
-/*
- * setup the dataset's content 
- * and fill in the model info, one dataset at a time
- * and allocate required memory space
- *
- * */
-int muscal_read_model(muscal_configuration_t *config, muscal_model_t *model, char *datadir) {
-
-    int max_idx=model->dataset_cnt; // how many datasets are there
-    for(int i=0; i<max_idx;i++) { 
-        muscal_dataset_t *data=make_a_muscal_dataset(datadir, config->dataset_files[i], config->too_big, config->use_binary); 
-        /* read in the surface data if enabled */
-        if(config->enable_1d) {
-           char filepath[256];
-           int count=config->surface_counts[i];
-           sprintf(filepath, "%s/%s", datadir, config->surface_files[i]);
-           if(muscal_ucvm_debug) fprintf(stderrfp," data file ..%s\n", filepath);
-           add_surface_data(data, filepath, count);
-        }
-
-        model->datasets[i]=data;
-    }
-    return SUCCESS;
-}
-
 /**
  * Called to clear out the allocated memory 
  *
  * @param 
  */
 int muscal_configuration_finalize(muscal_configuration_t *config) {
-    int max_idx=config->dataset_cnt; // how many datasets are there
-    for(int i=0; i<max_idx;i++) { 
-        free(config->dataset_labels[i]);  
-        free(config->dataset_files[i]);  
-        if(config->surface_files[i]!=NULL)
-          free(config->surface_files[i]);  
-    }
+    free(config->dataset_label);  
+    free(config->dataset_file);  
+    if(config->surface_file !=NULL) free(config->surface_file);  
     free(config);
     return SUCCESS;
 }
-
-/**
- * Called to clear out the allocated memory for model datasets 
- *
- * @param 
- */
-
-int muscal_velocity_model_finalize(muscal_model_t *model) {
-    int max_idx=model->dataset_cnt; // how many datasets are there
-    for(int i=0; i<max_idx; i++) {
-        muscal_dataset_t *data= model->datasets[i];
-        if(data != NULL) {
-          free_muscal_dataset(data);
-        }
-    }
-    return SUCCESS;
-}
-int muscal_velocity_model_init(muscal_model_t *model) {
-    model->dataset_cnt=0;
-    for(int i=0; i<MUSCAL_DATASET_MAX; i++) {
-        model->datasets[i]=NULL;
-    }
-    return SUCCESS;
-}
-
 
 /**
  * Prints the error string provided.
@@ -593,22 +426,6 @@ void muscal_print_error(char *err) {
     fprintf(stderr, "An error has occurred while executing muscal. The error was: \n\n%s\n",err);
     fprintf(stderr, "\nPlease contact software@scec.org and describe both the error and a bit\n");
     fprintf(stderr, "about the computer you are running muscal on (Linux, Mac, etc.).\n");
-}
-
-/*
- * Check if the data is too big to be loaded internally (exceed maximum
- * allowable by a INT variable)
- *
- */
-static int data_too_big(muscal_dataset_t *dataset) {
-    long max_size= (long) (dataset->nx) * dataset->ny * dataset->nz;
-    long delta= max_size - INT_MAX;
-
-    if( delta > 0) {
-        return 1;
-        } else {
-            return 0;
-        }
 }
 
 // The following functions are for dynamic library mode. If we are compiling

@@ -12,6 +12,8 @@
 #include <math.h>
 #include <ctype.h>
 
+extern int debug;
+
 float *get_binary_float_buffer(const char *path, char *datafile, int total);
 
 int find_buffer_idx(float *buffer, size_t nelems, float target);

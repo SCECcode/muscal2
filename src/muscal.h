@@ -17,6 +17,7 @@
 #include <math.h>
 
 #include "muscal_dataset.h"
+#include "muscal_util.h"
 
 /** Defines a return value of success */
 #define SUCCESS 0
@@ -56,14 +57,6 @@ typedef struct muscal_properties_t {
 	double qs;
 } muscal_properties_t;
 
-/**
-Dimensions: 3
-  dim[0] name=depth len=84
-  dim[1] name=latitude len=381
-  dim[2] name=longitude len=471
-Total elements: 15073884
-**/
-
 /** The MUSCAL configuration structure. */
 typedef struct muscal_configuration_t {
 	/** The zone of UTM projection */
@@ -73,27 +66,16 @@ typedef struct muscal_configuration_t {
 
 	/** interpolation on or off (1 or 0) */
 	int interpolation;
-	/** use_binary on or off (1 or 0) */
-	int use_binary;
-	/** too_big on or off (1 or 0) */
-	int too_big;
-	/** add muscal1d on or off (1 or 0) */
+
+	/** add 1d on or off (1 or 0) */
 	int enable_1d;
 
         /* how many datasets are in the model */
-        int dataset_cnt;
-        char *dataset_files[MUSCAL_DATASET_MAX];  //strdup
-	char *dataset_labels[MUSCAL_DATASET_MAX]; // strdup
-        char *surface_files[MUSCAL_DATASET_MAX];  //strdup
-        int surface_counts[MUSCAL_DATASET_MAX];
-						  
+        char *dataset_file;  //strdup
+	char *dataset_label; // strdup
+        char *surface_file;  //strdup
+        int surface_count;
 } muscal_configuration_t;
-
-typedef struct muscal_model_t {
-        int dataset_cnt;
-        muscal_dataset_t *datasets[MUSCAL_DATASET_MAX];
-} muscal_model_t;
-
 
 // Constants
 /** The version of the model. */
@@ -106,8 +88,8 @@ extern int muscal_is_initialized;
 /** Configuration parameters. */
 extern muscal_configuration_t *muscal_configuration;
 
-/** Holds pointers to the velocity model data OR indicates it can be read from file. */
-extern muscal_model_t *muscal_velocity_model;
+/** Holds pointers to the velocity model data. */
+extern muscal_dataset_t *muscal_dataset;
 
 // UCVM API Required Functions
 
@@ -148,16 +130,8 @@ int muscal_configuration_finalize(muscal_configuration_t *config);
 
 /** Prints out the error string. */
 void muscal_print_error(char *err);
-/** Retrieves the value at a specified grid point in the model. */
-void muscal_read_properties(int x, int y, int z, muscal_properties_t *data);
-/** Attempts to malloc the model size in memory and read it in. */
-int muscal_read_model(muscal_configuration_t *config, muscal_model_t *model, char* dir);
 /** toggle debug flag **/
 void muscal_setdebug();
-
-/** helper function for velocity_model **/
-int muscal_velocity_model_init(muscal_model_t *model);
-int muscal_velocity_model_finalize(muscal_model_t *model);
 
 /** parse JSON metadata blob per dataset **/
 int _setup_a_dataset(muscal_configuration_t *conf, char *blobstr);

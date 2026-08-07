@@ -36,6 +36,47 @@ AC_ARG_ENABLE([shared],
    esac],
   [enable_shared=yes])
 
+
+## for conversion code in tools directory 
+dnl netcdf
+AC_ARG_ENABLE([netcdf],
+    [AC_HELP_STRING([--enable-netcdf],
+        [install netCDF library @<:@default=yes@:>@])],
+        [if test "$enableval" = yes ; then install_netcdf=yes; else install_netcdf=no; fi],
+        [install_netcdf=yes])
+AM_CONDITIONAL([INSTALL_NETCDF], [test "$install_netcdf" = yes])
+AC_ARG_WITH([netcdf-incdir],
+  [AS_HELP_STRING([--with-netcdf-incdir], [directory containing netCDF header files])],
+  [with_netcdf_incdir="$withval"],
+  [with_netcdf_incdir=no])
+AC_SUBST(with_netcdf_incdir)
+AC_ARG_WITH([netcdf-libdir],
+  [AS_HELP_STRING([--with-netcdf-libdir], [directory containing netCDF library])],
+  [with_netcdf_libdir="$withval"],
+  [with_netcdf_libdir=no])
+AC_SUBST(with_netcdf_libdir)
+
+dnl hdf5
+AC_ARG_ENABLE([hdf5],
+    [AC_HELP_STRING([--enable-hdf5],
+        [install HDF5 library @<:@default=yes@:>@])],
+        [if test "$enableval" = yes ; then install_hdf5=yes; else install_hdf5=no; fi],
+        [install_hdf5=yes])
+AM_CONDITIONAL([INSTALL_HDF5], [test "$install_hdf5" = yes])
+AC_ARG_WITH([hdf5-incdir],
+  [AS_HELP_STRING([--with-hdf5-incdir], [directory containing HDF5 header files])],
+  [with_hdf5_incdir="$withval"],
+  [with_hdf5_incdir=no])
+AC_SUBST(with_hdf5_incdir)
+AC_ARG_WITH([hdf5-libdir],
+  [AS_HELP_STRING([--with-hdf5-libdir], [directory containing HDF5 library])],
+  [with_hdf5_libdir="$withval"],
+  [with_hdf5_libdir=no])
+AC_SUBST(with_hdf5_libdir)
+
+
+
+
 # export the variable for Makefile.in / Automake
 AC_SUBST([enable_shared])
 dnl --- end ---

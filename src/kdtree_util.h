@@ -16,8 +16,8 @@
 #define EARTH_RADIUS_M 6371000.0
 #define KD_MAX_LINE 1000
 
-extern int muscal_ucvm_debug;
-extern int muscal_ucvm_debug_detail;
+extern int muscaltdb_ucvm_debug;
+extern int muscaltdb_ucvm_debug_detail;
 extern FILE *stderrfp;
 
 

@@ -1,6 +1,6 @@
 /**
- * @file muscal.c
- * @brief Main file for muscal model
+ * @file muscaltdb.c
+ * @brief Main file for muscaltdb model
  * @version 1.0
  *
  * @section DESCRIPTION
@@ -9,37 +9,37 @@
 
 #include <limits.h>
 #include "ucvm_model_dtypes.h"
-#include "muscal.h"
+#include "muscaltdb.h"
 #include "cJSON.h"
 
-int muscal_ucvm_debug=0;
-int muscal_ucvm_debug_stats=0;
-int muscal_ucvm_debug_detail=0;
+int muscaltdb_ucvm_debug=0;
+int muscaltdb_ucvm_debug_stats=0;
+int muscaltdb_ucvm_debug_detail=0;
 FILE *stderrfp=NULL;
 
 char *tiledb_stats_json = NULL;
 
 /** The config of the model */
-char *muscal_config_string=NULL;
-int muscal_config_sz=0;
+char *muscaltdb_config_string=NULL;
+int muscaltdb_config_sz=0;
 
 // Constants
 /** The version of the model. */
-const char *muscal_version_string = "muscal";
+const char *muscaltdb_version_string = "muscaltdb";
 
 // Variables
 /** Set to 1 when the model is ready for query. */
-int muscal_is_initialized = 0;
+int muscaltdb_is_initialized = 0;
 
-char muscal_data_directory[128];
+char muscaltdb_data_directory[128];
 
 /** Configuration parameters. */
-muscal_configuration_t *muscal_configuration;
+muscaltdb_configuration_t *muscaltdb_configuration;
 /** Holds all info extracted from tiledb data */
-muscal_dataset_t *muscal_dataset;
+muscaltdb_dataset_t *muscaltdb_dataset;
 
 /**
- * Initializes the muscal plugin model within the UCVM framework. In order to initialize
+ * Initializes the muscaltdb plugin model within the UCVM framework. In order to initialize
  * the model, we must provide the UCVM install path and optionally a place in memory
  * where the model already exists.
  *
@@ -47,77 +47,77 @@ muscal_dataset_t *muscal_dataset;
  * @param label A unique identifier for the velocity model.
  * @return Success or failure, if initialization was successful.
  */
-int muscal_init(const char *dir, const char *label) {
+int muscaltdb_init(const char *dir, const char *label) {
     int tempVal = 0;
     char configbuf[512];
     double north_height_m = 0, east_width_m = 0, rotation_angle = 0;
 
-    if(muscal_ucvm_debug || muscal_ucvm_debug_stats){
-      stderrfp = fopen("muscal_debug.log", "w+");
-      fprintf(stderrfp,"\n===== START muscal ===== \n\n");
+    if(muscaltdb_ucvm_debug || muscaltdb_ucvm_debug_stats){
+      stderrfp = fopen("muscaltdb_debug.log", "w+");
+      fprintf(stderrfp,"\n===== START muscaltdb ===== \n\n");
     }
 
-    if(muscal_ucvm_debug_stats){ tiledb_stats_enable(); }
+    if(muscaltdb_ucvm_debug_stats){ tiledb_stats_enable(); }
 
     // Initialize variables.
     
-    muscal_configuration = calloc(1, sizeof(muscal_configuration_t));
-    muscal_config_string = calloc(MUSCAL_CONFIG_MAX, sizeof(char));
-    muscal_config_string[0]='\0';
-    muscal_config_sz=0;
+    muscaltdb_configuration = calloc(1, sizeof(muscaltdb_configuration_t));
+    muscaltdb_config_string = calloc(MUSCALTDB_CONFIG_MAX, sizeof(char));
+    muscaltdb_config_string[0]='\0';
+    muscaltdb_config_sz=0;
 
     // Configuration file location.
     sprintf(configbuf, "%s/model/%s/data/config", dir, label);
 
     // Read the configuration file.
-    if (muscal_read_configuration(configbuf, muscal_configuration) != UCVM_MODEL_CODE_SUCCESS) {
+    if (muscaltdb_read_configuration(configbuf, muscaltdb_configuration) != UCVM_MODEL_CODE_SUCCESS) {
            // Try another, when is running in standalone mode..
        sprintf(configbuf, "%s/data/config", dir);
-       if (muscal_read_configuration(configbuf, muscal_configuration) != UCVM_MODEL_CODE_SUCCESS) {
-           muscal_print_error("No configuration file was found to read from.");
+       if (muscaltdb_read_configuration(configbuf, muscaltdb_configuration) != UCVM_MODEL_CODE_SUCCESS) {
+           muscaltdb_print_error("No configuration file was found to read from.");
            return UCVM_MODEL_CODE_ERROR;
            } else {
            // Set up the data directory.
-               sprintf(muscal_data_directory, "%s/data/%s", dir, muscal_configuration->model_dir);
+               sprintf(muscaltdb_data_directory, "%s/data/%s", dir, muscaltdb_configuration->model_dir);
        }
        } else {
            // Set up the data directory.
-           sprintf(muscal_data_directory, "%s/model/%s/data/%s", dir, label, muscal_configuration->model_dir);
+           sprintf(muscaltdb_data_directory, "%s/model/%s/data/%s", dir, label, muscaltdb_configuration->model_dir);
     }
 
-    muscal_dataset = muscal_read_dataset(muscal_data_directory, muscal_configuration->dataset_file);
-    if (muscal_dataset == NULL) {
-        muscal_print_error("No model file was found to read from.");
+    muscaltdb_dataset = muscaltdb_read_dataset(muscaltdb_data_directory, muscaltdb_configuration->dataset_file);
+    if (muscaltdb_dataset == NULL) {
+        muscaltdb_print_error("No model file was found to read from.");
         return FAIL;
     }
-    if( muscal_configuration->enable_1d) {
-        muscal_read_surface(muscal_dataset, muscal_configuration->surface_count,
-                muscal_data_directory, muscal_configuration->surface_file);
+    if( muscaltdb_configuration->enable_1d) {
+        muscaltdb_read_surface(muscaltdb_dataset, muscaltdb_configuration->surface_count,
+                muscaltdb_data_directory, muscaltdb_configuration->surface_file);
     }
 
     // setup config_string 
-    sprintf(muscal_config_string,"config = %s\n",configbuf);
-    muscal_config_sz=1;
+    sprintf(muscaltdb_config_string,"config = %s\n",configbuf);
+    muscaltdb_config_sz=1;
 
     // Let everyone know that we are initialized and ready for business.
-    muscal_is_initialized = 1;
+    muscaltdb_is_initialized = 1;
 
     return SUCCESS;
 }
 
 /**
- * Queries muscal at the given points and returns the data that it finds.
+ * Queries muscaltdb at the given points and returns the data that it finds.
  *
  * @param points The points at which the queries will be made.
  * @param data The data that will be returned (Vp, Vs, rho, Qs, and/or Qp).
  * @param numpoints The total number of points to query.
  * @return SUCCESS or FAIL.
  */
-int muscal_query(muscal_point_t *points, muscal_properties_t *data, int numpoints) {
+int muscaltdb_query(muscaltdb_point_t *points, muscaltdb_properties_t *data, int numpoints) {
 
-if(muscal_ucvm_debug){ fprintf(stderrfp,"\ncalling muscal_query with %d numpoints\n",numpoints); }
+if(muscaltdb_ucvm_debug){ fprintf(stderrfp,"\ncalling muscaltdb_query with %d numpoints\n",numpoints); }
 
-    muscal_dataset_t *model=muscal_dataset;
+    muscaltdb_dataset_t *model=muscaltdb_dataset;
 
     float *lon_list=model->longitudes;
     float *lat_list=model->latitudes;
@@ -133,7 +133,7 @@ if(muscal_ucvm_debug){ fprintf(stderrfp,"\ncalling muscal_query with %d numpoint
     int offset;
 
 //  hold coord point's info
-    muscal_pt_info_t *pt_info = (muscal_pt_info_t  *) malloc(numpoints * sizeof(muscal_pt_info_t));
+    muscaltdb_pt_info_t *pt_info = (muscaltdb_pt_info_t  *) malloc(numpoints * sizeof(muscaltdb_pt_info_t));
     if (!pt_info) { fprintf(stderr, "pt_info: malloc failed\n");}
 
 // iterate through all the points and compose the buffers for all index
@@ -147,7 +147,7 @@ if(muscal_ucvm_debug){ fprintf(stderrfp,"\ncalling muscal_query with %d numpoint
         pt_info[i].lon=points[i].longitude;
         pt_info[i].lat=points[i].latitude;
         pt_info[i].dep=points[i].depth;
-        if(muscal_ucvm_debug_stats) {
+        if(muscaltdb_ucvm_debug_stats) {
             fprintf(stderrfp,"POINT: %lf %lf %lf\n", points[i].longitude,points[i].latitude,points[i].depth);
         }
 
@@ -160,7 +160,7 @@ if(muscal_ucvm_debug){ fprintf(stderrfp,"\ncalling muscal_query with %d numpoint
           continue;
         }
 
-        if(muscal_configuration->interpolation) { // fill cell percent
+        if(muscaltdb_configuration->interpolation) { // fill cell percent
             pt_info[i].lon_percent=find_cell_percent(lon_list,pt_info[i].lon,pt_info[i].lon_idx);
             pt_info[i].lat_percent=find_cell_percent(lat_list,pt_info[i].lat,pt_info[i].lat_idx);
             pt_info[i].dep_percent=find_cell_percent(dep_list,pt_info[i].dep,pt_info[i].dep_idx);
@@ -169,7 +169,7 @@ if(muscal_ucvm_debug){ fprintf(stderrfp,"\ncalling muscal_query with %d numpoint
 
     // should be in the in-memory 
     for(int i=0; i<numpoints; i++) {
-        if(!muscal_configuration->interpolation) { 
+        if(!muscaltdb_configuration->interpolation) { 
         // no interp
             get_one_property(model, &(pt_info[i]), &(data[i]));
             } else {
@@ -178,12 +178,12 @@ if(muscal_ucvm_debug){ fprintf(stderrfp,"\ncalling muscal_query with %d numpoint
 
 // If result is None, then need to process
 // with 1d nearest neighbor surface property
-        if(isnan(data[i].vp) && isnan(data[i].vs) && muscal_configuration->enable_1d) {
+        if(isnan(data[i].vp) && isnan(data[i].vs) && muscaltdb_configuration->enable_1d) {
             get_1dnn_property(model, &(pt_info[i]), &(data[i]));
         }
     } 
 
-    if(muscal_ucvm_debug_stats){
+    if(muscaltdb_ucvm_debug_stats){
         fprintf(stderrfp,"--TileDB Query Performance Stats --\n");
         //tiledb_stats_dump(stderrfp);
         //tiledb_stats_raw_dump_str(&tiledb_stats_json);
@@ -198,8 +198,8 @@ if(muscal_ucvm_debug){ fprintf(stderrfp,"\ncalling muscal_query with %d numpoint
 
 /**
  */
-void muscal_setdebug() {
-   muscal_ucvm_debug=1;
+void muscaltdb_setdebug() {
+   muscaltdb_ucvm_debug=1;
 }               
 
 /**
@@ -207,23 +207,23 @@ void muscal_setdebug() {
  *
  * @return SUCCESS
  */
-int muscal_finalize() {
+int muscaltdb_finalize() {
 
-    muscal_is_initialized = 0;
+    muscaltdb_is_initialized = 0;
 
-    if (muscal_configuration) {
-        muscal_configuration_finalize(muscal_configuration);
+    if (muscaltdb_configuration) {
+        muscaltdb_configuration_finalize(muscaltdb_configuration);
     }
-    if (muscal_dataset) {
-        free_muscal_dataset(muscal_dataset);
+    if (muscaltdb_dataset) {
+        free_muscaltdb_dataset(muscaltdb_dataset);
     }
 
-    if(muscal_ucvm_debug || muscal_ucvm_debug_stats){
+    if(muscaltdb_ucvm_debug || muscaltdb_ucvm_debug_stats){
      fprintf(stderrfp,"::DONE::\n"); 
      fclose(stderrfp);
     }
 
-    if(muscal_ucvm_debug_stats){ tiledb_stats_disable(); }   
+    if(muscaltdb_ucvm_debug_stats){ tiledb_stats_disable(); }   
 
     return SUCCESS;
 }
@@ -235,15 +235,15 @@ int muscal_finalize() {
  * @param len Maximum length of buffer.
  * @return Zero
  */
-int muscal_version(char *ver, int len)
+int muscaltdb_version(char *ver, int len)
 {
   int verlen;
-  verlen = strlen(muscal_version_string);
+  verlen = strlen(muscaltdb_version_string);
   if (verlen > len - 1) {
     verlen = len - 1;
   }
   memset(ver, 0, len);
-  strncpy(ver, muscal_version_string, verlen);
+  strncpy(ver, muscaltdb_version_string, verlen);
   return 0;
 }
 
@@ -254,12 +254,12 @@ int muscal_version(char *ver, int len)
  * @param sz number of config terms.
  * @return Zero
  */
-int muscal_config(char **config, int *sz)
+int muscaltdb_config(char **config, int *sz)
 {
-  int len=strlen(muscal_config_string);
+  int len=strlen(muscaltdb_config_string);
   if(len > 0) {
-    *config=muscal_config_string;
-    *sz=muscal_config_sz;
+    *config=muscaltdb_config_string;
+    *sz=muscaltdb_config_sz;
     return SUCCESS;
   }
   return FAIL;
@@ -267,15 +267,15 @@ int muscal_config(char **config, int *sz)
 
 
 /**
- * Reads the muscal_configuration file describing the various properties of MUSCAL and populates
- * the muscal_configuration struct. This assumes muscal_configuration has been "calloc'ed" and validates
+ * Reads the muscaltdb_configuration file describing the various properties of MUSCALTDB and populates
+ * the muscaltdb_configuration struct. This assumes muscaltdb_configuration has been "calloc'ed" and validates
  * that each value is not zero at the end.
  *
- * @param file The muscal_configuration file location on disk to read.
- * @param config The muscal_configuration struct to which the data should be written.
+ * @param file The muscaltdb_configuration file location on disk to read.
+ * @param config The muscaltdb_configuration struct to which the data should be written.
  * @return Number of dataset expected in the model
  */
-int muscal_read_configuration(char *file, muscal_configuration_t *config) {
+int muscaltdb_read_configuration(char *file, muscaltdb_configuration_t *config) {
     FILE *fp = fopen(file, "r");
     char key[40];
     char value[1000];
@@ -284,12 +284,12 @@ int muscal_read_configuration(char *file, muscal_configuration_t *config) {
     // If our file pointer is null, an error has occurred. Return fail.
     if (fp == NULL) { return UCVM_MODEL_CODE_ERROR; }
 
-    // Read the lines in the muscal_configuration file.
+    // Read the lines in the muscaltdb_configuration file.
     while (fgets(line_holder, sizeof(line_holder), fp) != NULL) {
 
         if (line_holder[0] != '#' && line_holder[0] != ' ' && line_holder[0] != '\n') {
             _splitline(line_holder, key, value);
-            if(muscal_ucvm_debug){ fprintf(stderrfp, "a config line: %s\n", line_holder); }
+            if(muscaltdb_ucvm_debug){ fprintf(stderrfp, "a config line: %s\n", line_holder); }
 
             // Which variable are we editing?
             if (strcmp(key, "utm_zone") == 0) config->utm_zone = atoi(value);
@@ -297,27 +297,27 @@ int muscal_read_configuration(char *file, muscal_configuration_t *config) {
             if (strcmp(key, "interpolation") == 0) { 
                 config->interpolation=0;
                 if (strcmp(value,"on") == 0) { config->interpolation=1;
-if(muscal_ucvm_debug){ fprintf(stderrfp, "enabled Interpolation\n"); }
+if(muscaltdb_ucvm_debug){ fprintf(stderrfp, "enabled Interpolation\n"); }
                 }
             }
             if (strcmp(key, "enable_1d") == 0) { 
                 config->enable_1d=0;
                 if (strcmp(value,"on") == 0) { config->enable_1d=1;
-if(muscal_ucvm_debug){ fprintf(stderrfp, "enabled muscal1d to fill all empty returns\n"); }
+if(muscaltdb_ucvm_debug){ fprintf(stderrfp, "enabled muscaltdb1d to fill all empty returns\n"); }
                 }
             }
          /* get data for the dataset */
             if (strcmp(key, "data_file") == 0) { 
                   int rc=_setup_a_dataset(config,value);
-                  if(rc !=1 ) { muscal_print_error("BAD data_file."); }
+                  if(rc !=1 ) { muscaltdb_print_error("BAD data_file."); }
          } 
         }
     }
 
-    // Have we set up all muscal_configuration parameters?
+    // Have we set up all muscaltdb_configuration parameters?
     if (config->utm_zone == 0 || (strcmp(config->model_dir,"")==0) ||
         config->dataset_file == NULL  || config->dataset_label == NULL ) {
-        muscal_print_error("One muscal_configuration parameter not specified. Please check your muscal_configuration file.");
+        muscaltdb_print_error("One muscaltdb_configuration parameter not specified. Please check your muscaltdb_configuration file.");
         return UCVM_MODEL_CODE_ERROR;
     }
 
@@ -326,13 +326,13 @@ if(muscal_ucvm_debug){ fprintf(stderrfp, "enabled muscal1d to fill all empty ret
 }
 
 /**
- * Extract muscal dataset specific info
+ * Extract muscaltdb dataset specific info
  * and fill in the model info, one dataset at a time
  * and allocate required memory space
  *
  * @param 
  */
-int _setup_a_dataset(muscal_configuration_t *config, char *blobstr) {
+int _setup_a_dataset(muscaltdb_configuration_t *config, char *blobstr) {
     /* parse the blob and grab the meta data */
     cJSON *confjson=cJSON_Parse(blobstr);
 
@@ -340,7 +340,7 @@ int _setup_a_dataset(muscal_configuration_t *config, char *blobstr) {
     if(confjson == NULL) {
         const char *eptr = cJSON_GetErrorPtr();
         if(eptr != NULL) {
-            if(muscal_ucvm_debug){ fprintf(stderrfp, "Configuration dataset setup error: (%s)\n", eptr); }
+            if(muscaltdb_ucvm_debug){ fprintf(stderrfp, "Configuration dataset setup error: (%s)\n", eptr); }
             return FAIL;
         }
     }
@@ -409,7 +409,7 @@ void _splitline(char* lptr, char key[], char value[]) {
  *
  * @param 
  */
-int muscal_configuration_finalize(muscal_configuration_t *config) {
+int muscaltdb_configuration_finalize(muscaltdb_configuration_t *config) {
     free(config->dataset_label);  
     free(config->dataset_file);  
     if(config->surface_file !=NULL) free(config->surface_file);  
@@ -422,10 +422,10 @@ int muscal_configuration_finalize(muscal_configuration_t *config) {
  *
  * @param err The error string to print out to stderr.
  */
-void muscal_print_error(char *err) {
-    fprintf(stderr, "An error has occurred while executing muscal. The error was: \n\n%s\n",err);
+void muscaltdb_print_error(char *err) {
+    fprintf(stderr, "An error has occurred while executing muscaltdb. The error was: \n\n%s\n",err);
     fprintf(stderr, "\nPlease contact software@scec.org and describe both the error and a bit\n");
-    fprintf(stderr, "about the computer you are running muscal on (Linux, Mac, etc.).\n");
+    fprintf(stderr, "about the computer you are running muscaltdb on (Linux, Mac, etc.).\n");
 }
 
 // The following functions are for dynamic library mode. If we are compiling
@@ -433,73 +433,73 @@ void muscal_print_error(char *err) {
 #ifdef DYNAMIC_LIBRARY
 
 /**
- * Init function loaded and called by the UCVM library. Calls muscal_init.
+ * Init function loaded and called by the UCVM library. Calls muscaltdb_init.
  *
  * @param dir The directory in which UCVM is installed.
  * @return Success or failure.
  */
 int model_init(const char *dir, const char *label) {
-    return muscal_init(dir, label);
+    return muscaltdb_init(dir, label);
 }
 
 /**
- * Query function loaded and called by the UCVM library. Calls muscal_query.
+ * Query function loaded and called by the UCVM library. Calls muscaltdb_query.
  *
  * @param points The basic_point_t array containing the points.
  * @param data The basic_properties_t array containing the material properties returned.
  * @param numpoints The number of points in the array.
  * @return Success or fail.
  */
-int model_query(muscal_point_t *points, muscal_properties_t *data, int numpoints) {
-    return muscal_query(points, data, numpoints);
+int model_query(muscaltdb_point_t *points, muscaltdb_properties_t *data, int numpoints) {
+    return muscaltdb_query(points, data, numpoints);
 }
 
 /**
- * Finalize function loaded and called by the UCVM library. Calls muscal_finalize.
+ * Finalize function loaded and called by the UCVM library. Calls muscaltdb_finalize.
  *
  * @return Success
  */
 int model_finalize() {
-    return muscal_finalize();
+    return muscaltdb_finalize();
 }
 
 /**
- * Version function loaded and called by the UCVM library. Calls muscal_version.
+ * Version function loaded and called by the UCVM library. Calls muscaltdb_version.
  *
  * @param ver Version string to return.
  * @param len Maximum length of buffer.
  * @return Zero
  */
 int model_version(char *ver, int len) {
-    return muscal_version(ver, len);
+    return muscaltdb_version(ver, len);
 }
 
 /**
- * Version function loaded and called by the UCVM library. Calls muscal_config.
+ * Version function loaded and called by the UCVM library. Calls muscaltdb_config.
  *
  * @param config Config string to return.
  * @param sz number of config terms
  * @return Zero
  */
 int model_config(char **config, int *sz) {
-    return muscal_config(config, sz);
+    return muscaltdb_config(config, sz);
 }
 
 
 int (*get_model_init())(const char *, const char *) {
-        return &muscal_init;
+        return &muscaltdb_init;
 }
-int (*get_model_query())(muscal_point_t *, muscal_properties_t *, int) {
-         return &muscal_query;
+int (*get_model_query())(muscaltdb_point_t *, muscaltdb_properties_t *, int) {
+         return &muscaltdb_query;
 }
 int (*get_model_finalize())() {
-         return &muscal_finalize;
+         return &muscaltdb_finalize;
 }
 int (*get_model_version())(char *, int) {
-         return &muscal_version;
+         return &muscaltdb_version;
 }
 int (*get_model_config())(char **, int*) {
-    return &muscal_config;
+    return &muscaltdb_config;
 }
 
 

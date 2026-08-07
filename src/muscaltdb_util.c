@@ -1,8 +1,8 @@
 /*
- * muscal_util.c
+ * muscaltdb_util.c
 */
 
-#include "muscal_util.h"
+#include "muscaltdb_util.h"
 
 int debug=0;
 

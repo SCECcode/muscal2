@@ -141,7 +141,7 @@ int _find_cell_location(float* coord_array, uint32_t total_elements,
 // with lon/lat/dep,  fill in idx/fraction
 // or
 // with idx, fill in lat/lon/dep
-int fill_pt_info(um_tiledb_t *tdb, muscal_pt_info_t *pt) {
+int fill_pt_info(um_tiledb_t *tdb, muscaltdb_pt_info_t *pt) {
     if(pt->latlon) {
       _find_nearest_and_fraction(tdb->dep_list, tdb->dep_cnt, pt->dep, &pt->dep_idx, &pt->dep_fraction);
       _find_nearest_and_fraction(tdb->lon_list, tdb->lon_cnt, pt->lon, &pt->lon_idx, &pt->lon_fraction);
@@ -154,7 +154,7 @@ int fill_pt_info(um_tiledb_t *tdb, muscal_pt_info_t *pt) {
     return 0;
 }
 
-int fill_point_tiledb(um_tiledb_t *tdb, muscal_pt_info_t *pt, muscal_pt_property_t *data) {
+int fill_point_tiledb(um_tiledb_t *tdb, muscaltdb_pt_info_t *pt, muscaltdb_pt_property_t *data) {
     tiledb_ctx_t* ctx = tdb->ctx;
     tiledb_array_t* array = tdb->array;
     tiledb_query_t* query = NULL;
@@ -239,7 +239,7 @@ void dump_coords_tiledb(um_tiledb_t *tdb, const char *fname, FILE *fp) {
 }
 
 
-void dump_point_tiledb(muscal_pt_info_t *pt, muscal_pt_property_t *data, const char *fname, FILE *fp) {
+void dump_point_tiledb(muscaltdb_pt_info_t *pt, muscaltdb_pt_property_t *data, const char *fname, FILE *fp) {
     fprintf(fp,"===========================================\n");
     fprintf(fp,"%s\n", fname );
     fprintf(fp,"===========================================\n");

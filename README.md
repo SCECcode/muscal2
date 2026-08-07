@@ -1,10 +1,10 @@
-# The Multi-scale Statewide CALifornia Velocity Model with TileDB (muscal)
+# The Multi-scale Statewide CALifornia Velocity Model with TileDB (muscaltdb)
 
-<a href="https://github.com/sceccode/muscal.git"><img src="https://github.com/sceccode/muscal/wiki/images/muscal_logo.png"></a>
+<a href="https://github.com/sceccode/muscaltdb.git"><img src="https://github.com/sceccode/muscaltdb/wiki/images/muscaltdb_logo.png"></a>
 
 [![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
-![GitHub repo size](https://img.shields.io/github/repo-size/sceccode/muscal)
-[![muscal-ucvm-ci Actions Status](https://github.com/SCECcode/muscal/workflows/muscal-ucvm-ci/badge.svg)](https://github.com/SCECcode/muscal/actions)
+![GitHub repo size](https://img.shields.io/github/repo-size/sceccode/muscaltdb)
+[![muscaltdb-ucvm-ci Actions Status](https://github.com/SCECcode/muscaltdb/workflows/muscaltdb-ucvm-ci/badge.svg)](https://github.com/SCECcode/muscaltdb/actions)
 
 The Multi-Scale CALifornia (MUSCAL) statewide Vp and Vs velocity models provide 
 high-quality integrated description of seismic structures across the state. 
@@ -66,9 +66,9 @@ Model initialization :
 Query access
    Fill in background with nearest neighboring surface point from surface KDtree 
 
-### muscal_query
+### muscaltdb_query
 
-### muscal_surface
+### muscaltdb_surface
 
 ### query_kdtree
 

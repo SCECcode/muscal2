@@ -1,13 +1,13 @@
 /**
- * @file muscal.h
- * @brief Main header file for MUSCAL library.
+ * @file muscaltdb.h
+ * @brief Main header file for MUSCALTDB library.
  * @version 1.0
  *
- * Delivers the MUSCAL model 
+ * Delivers the MUSCALTDB model 
  *
  */
-#ifndef MUSCAL_H
-#define MUSCAL_H
+#ifndef MUSCALTDB_H
+#define MUSCALTDB_H
 
 // Includes
 #include <stdio.h>
@@ -16,8 +16,8 @@
 #include <unistd.h>
 #include <math.h>
 
-#include "muscal_dataset.h"
-#include "muscal_util.h"
+#include "muscaltdb_dataset.h"
+#include "muscaltdb_util.h"
 
 /** Defines a return value of success */
 #define SUCCESS 0
@@ -25,26 +25,26 @@
 #define FAIL 1
 
 /* config string */
-#define MUSCAL_CONFIG_MAX 1000
-#define MUSCAL_DATASET_MAX 1
+#define MUSCALTDB_CONFIG_MAX 1000
+#define MUSCALTDB_DATASET_MAX 1
 
-extern int muscal_ucvm_debug;
-extern int muscal_ucvm_debug_detail;
+extern int muscaltdb_ucvm_debug;
+extern int muscaltdb_ucvm_debug_detail;
 extern FILE *stderrfp;
 
 // Structures
 /** Defines a point (latitude, longitude, and depth) in WGS84 format */
-typedef struct muscal_point_t {
+typedef struct muscaltdb_point_t {
 	/** Longitude member of the point */
 	double longitude;
 	/** Latitude member of the point */
 	double latitude;
 	/** Depth member of the point */
 	double depth;
-} muscal_point_t;
+} muscaltdb_point_t;
 
 /** Defines the material properties this model will retrieve. */
-typedef struct muscal_properties_t {
+typedef struct muscaltdb_properties_t {
 	/** P-wave velocity in meters per second */
 	double vp;
 	/** S-wave velocity in meters per second */
@@ -55,10 +55,10 @@ typedef struct muscal_properties_t {
 	double qp;
 	/** Qs */
 	double qs;
-} muscal_properties_t;
+} muscaltdb_properties_t;
 
-/** The MUSCAL configuration structure. */
-typedef struct muscal_configuration_t {
+/** The MUSCALTDB configuration structure. */
+typedef struct muscaltdb_configuration_t {
 	/** The zone of UTM projection */
 	int utm_zone;
 	/** The model directory */
@@ -75,21 +75,21 @@ typedef struct muscal_configuration_t {
 	char *dataset_label; // strdup
         char *surface_file;  //strdup
         int surface_count;
-} muscal_configuration_t;
+} muscaltdb_configuration_t;
 
 // Constants
 /** The version of the model. */
-extern const char *muscal_version_string;
+extern const char *muscaltdb_version_string;
 
 // Variables
 /** Set to 1 when the model is ready for query. */
-extern int muscal_is_initialized;
+extern int muscaltdb_is_initialized;
 
 /** Configuration parameters. */
-extern muscal_configuration_t *muscal_configuration;
+extern muscaltdb_configuration_t *muscaltdb_configuration;
 
 /** Holds pointers to the velocity model data. */
-extern muscal_dataset_t *muscal_dataset;
+extern muscaltdb_dataset_t *muscaltdb_dataset;
 
 // UCVM API Required Functions
 
@@ -102,39 +102,39 @@ int model_finalize();
 /** Returns version information */
 int model_version(char *ver, int len);
 /** Queries the model */
-int model_query(muscal_point_t *points, muscal_properties_t *data, int numpts);
+int model_query(muscaltdb_point_t *points, muscaltdb_properties_t *data, int numpts);
 
 int (*get_model_init())(const char *, const char *);
-int (*get_model_query())(muscal_point_t *, muscal_properties_t *, int);
+int (*get_model_query())(muscaltdb_point_t *, muscaltdb_properties_t *, int);
 int (*get_model_finalize())();
 int (*get_model_version())(char *, int);
 
 #endif
 
-// MUSCAL Related Functions
+// MUSCALTDB Related Functions
 
 /** Initializes the model */
-int muscal_init(const char *dir, const char *label);
+int muscaltdb_init(const char *dir, const char *label);
 /** Cleans up the model (frees memory, etc.) */
-int muscal_finalize();
+int muscaltdb_finalize();
 /** Returns version information */
-int muscal_version(char *ver, int len);
+int muscaltdb_version(char *ver, int len);
 /** Queries the model */
-int muscal_query(muscal_point_t *points, muscal_properties_t *data, int numpts);
+int muscaltdb_query(muscaltdb_point_t *points, muscaltdb_properties_t *data, int numpts);
 
 // Non-UCVM Helper Functions
 //
 /** Reads the configuration file and helper functions. */
-int muscal_read_configuration(char *file, muscal_configuration_t *config);
-int muscal_configuration_finalize(muscal_configuration_t *config);
+int muscaltdb_read_configuration(char *file, muscaltdb_configuration_t *config);
+int muscaltdb_configuration_finalize(muscaltdb_configuration_t *config);
 
 /** Prints out the error string. */
-void muscal_print_error(char *err);
+void muscaltdb_print_error(char *err);
 /** toggle debug flag **/
-void muscal_setdebug();
+void muscaltdb_setdebug();
 
 /** parse JSON metadata blob per dataset **/
-int _setup_a_dataset(muscal_configuration_t *conf, char *blobstr);
+int _setup_a_dataset(muscaltdb_configuration_t *conf, char *blobstr);
 
 void _trimLast(char *str, char m);
 void _splitline(char* lptr, char key[], char value[]);

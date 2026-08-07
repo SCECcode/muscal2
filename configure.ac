@@ -2,7 +2,7 @@ dnl -*- Autoconf -*-
 dnl Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.59)
-AC_INIT(MUSCAL, 1.1.0, software@scec.org)
+AC_INIT(MUSCALTDBTDB, 1.1.0, software@scec.org)
 AC_CONFIG_MACRO_DIR([m4])
 AM_INIT_AUTOMAKE([foreign tar-pax no-exeext])
 
@@ -60,21 +60,21 @@ dnl Verify configuration
 dnl
 
 ##check optional large data path
-##MUSCAL_LARGEDATA_DIR=$CVM_LARGEDATA_DIR/model/muscal
+##MUSCALTDB_LARGEDATA_DIR=$CVM_LARGEDATA_DIR/model/muscaltdb
 if test x"$CVM_LARGEDATA_DIR" != x; then
    # test directory existence
-   MUSCAL_LARGEDATA_DIR=$CVM_LARGEDATA_DIR/model/muscal
+   MUSCALTDB_LARGEDATA_DIR=$CVM_LARGEDATA_DIR/model/muscaltdb
 # In docker container building.. this is not accessible  yet ???
    if test x"$CVM_IN_DOCKER" != x; then
-     AM_CONDITIONAL([WITH_MUSCAL_LARGEDATA_DIR], true)
-     AC_SUBST(MUSCAL_LARGEDATA_DIR)
+     AM_CONDITIONAL([WITH_MUSCALTDB_LARGEDATA_DIR], true)
+     AC_SUBST(MUSCALTDB_LARGEDATA_DIR)
    else 
-     AC_CHECK_FILE([$MUSCAL_LARGEDATA_DIR/model_MUSCAL_CANVAS_dll0.01_vardz_float32_cmpd.tiledb],
-                [AM_CONDITIONAL([WITH_MUSCAL_LARGEDATA_DIR], true) AC_SUBST(MUSCAL_LARGEDATA_DIR)],
-                [AM_CONDITIONAL([WITH_MUSCAL_LARGEDATA_DIR], false)])
+     AC_CHECK_FILE([$MUSCALTDB_LARGEDATA_DIR/model_MUSCALTDB_CANVAS_dll0.01_vardz_float32_cmpd.tiledb],
+                [AM_CONDITIONAL([WITH_MUSCALTDB_LARGEDATA_DIR], true) AC_SUBST(MUSCALTDB_LARGEDATA_DIR)],
+                [AM_CONDITIONAL([WITH_MUSCALTDB_LARGEDATA_DIR], false)])
    fi
 else
-   AM_CONDITIONAL(WITH_MUSCAL_LARGEDATA_DIR, false)
+   AM_CONDITIONAL(WITH_MUSCALTDB_LARGEDATA_DIR, false)
 fi
 
 AC_SUBST(CFLAGS)

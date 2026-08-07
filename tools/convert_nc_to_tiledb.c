@@ -3,7 +3,7 @@
 
    Usage: ./convert_nc_to_tiledb nc_file tiledb_file
 
-nc_file => /var/www/html/CVM_DATASET_DIRECTORY/model/muscal/model_MUSCAL_CANVAS_dll0.01_vardz_float32_cmpd.nc
+nc_file => /var/www/html/CVM_DATASET_DIRECTORY/model/muscaltdb/model_MUSCAL_CANVAS_dll0.01_vardz_float32_cmpd.nc
 tiledb_file => model_MUSCAL_CANVAS_dll0.01_vardz_float32_cmpd.tiledb
 
 **/ 

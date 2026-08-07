@@ -27,7 +27,7 @@ typedef struct um_tiledb_t {
 
 // if latlon is set, starting condition is lat/lon/dep
 // else              starting condition is indieces
-typedef struct muscal_pt_info_t {
+typedef struct muscaltdb_pt_info_t {
     int latlon;
     float lon;
     float lat;
@@ -38,14 +38,14 @@ typedef struct muscal_pt_info_t {
     float lon_fraction;
     float lat_fraction;
     float dep_fraction;
-} muscal_pt_info_t;
+} muscaltdb_pt_info_t;
 
 
-typedef struct muscal_pt_property_t {
+typedef struct muscaltdb_pt_property_t {
     float vp;
     float vs;
     float rho;
-} muscal_pt_property_t;
+} muscaltdb_pt_property_t;
 
 
 void setup_tiledb(um_tiledb_t *tdb);
@@ -53,11 +53,11 @@ void free_tiledb(um_tiledb_t *tdb);
 
 int open_tiledb(um_tiledb_t *tdb, const char  *tiledb_array_name);
 int fill_metadata_tiledb(um_tiledb_t *tdb);
-int fill_point_tiledb(um_tiledb_t *tdb, muscal_pt_info_t *pt, muscal_pt_property_t *data);
+int fill_point_tiledb(um_tiledb_t *tdb, muscaltdb_pt_info_t *pt, muscaltdb_pt_property_t *data);
 
-int fill_pt_info(um_tiledb_t *tdb, muscal_pt_info_t *pt);
+int fill_pt_info(um_tiledb_t *tdb, muscaltdb_pt_info_t *pt);
 
 void dump_coords_tiledb(um_tiledb_t *tdb, const char *fname, FILE *fp);
-void dump_point_tiledb(muscal_pt_info_t *pt, muscal_pt_property_t *data, const char *fname, FILE *fp);
+void dump_point_tiledb(muscaltdb_pt_info_t *pt, muscaltdb_pt_property_t *data, const char *fname, FILE *fp);
 
 #endif

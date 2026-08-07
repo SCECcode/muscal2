@@ -14,6 +14,7 @@ install:
 	mkdir -p ${prefix}
 	mkdir -p ${prefix}/lib
 	mkdir -p ${prefix}/include
+	mkdir -p ${prefix}/bin
 	cp libmuscaltdb.so ${prefix}/lib
 	cp libmuscaltdb.a ${prefix}/lib
 	cp muscaltdb.h ${prefix}/include

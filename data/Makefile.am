@@ -10,7 +10,7 @@ if WITH_MUSCALTDB_LARGEDATA_DIR
 	echo "USING WITH_MUSCALTDB_LARGEDATA_DIR in muscaltdb"
 else
 	echo "NOT USING WITH_MUSCALTDB_LARGEDATA_DIR in muscaltdb"
-	if [ ! -d "muscaltdb" ]; then \
+	if [ ! -d "muscaltdb" ] && [ ! -L "muscaltdb" ]; then \
 		./make_data_files.py; \
 	fi 
 endif

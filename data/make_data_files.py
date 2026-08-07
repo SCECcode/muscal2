@@ -11,32 +11,11 @@ import shutil
 import subprocess
 import os
 
-if sys.version_info.major >= (3) :
-  from urllib.request import urlopen
-else:
-  from urllib2 import urlopen
-
 model = "MUSCALTDB"
 
 def usage():
     print("\n./make_data_files.py\n\n")
     sys.exit(0)
-
-def download_urlfile_chunk(url,fname):
-  try:
-    response = urlopen(url)
-    CHUNK = 16 * 1024
-    with open(fname, 'wb') as f:
-      while True:
-        chunk = response.read(CHUNK)
-        if not chunk:
-          break
-        f.write(chunk)
-  except:
-    e = sys.exc_info()[0]
-    print("Exception retrieving and saving model datafiles:",e)
-    raise
-  return True
 
 def download_urlfile(url, fname):
     # Option 1A: aria2c tuned for slow/unstable connections
